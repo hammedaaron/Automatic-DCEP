@@ -1,0 +1,107 @@
+
+export enum UserRole {
+  REGULAR = 'REGULAR',
+  ADMIN = 'ADMIN',
+  DEV = 'DEV'
+}
+
+export enum RewardLevel {
+  BRONZE = 'BRONZE',
+  SILVER = 'SILVER',
+  GOLD = 'GOLD',
+  DIAMOND = 'DIAMOND',
+  CROWN = 'CROWN'
+}
+
+export interface PodSession {
+  name: string;
+  start: string; // "HH:mm"
+  end: string;   // "HH:mm"
+}
+
+export interface Party {
+  id: string;
+  name: string;
+  timezone?: string;
+  pod_sessions?: PodSession[];
+  max_slots?: number;
+}
+
+export interface User {
+  id: string;
+  name: string;
+  password?: string;
+  admin_code?: string;
+  role: UserRole;
+  party_id: string;
+  profile_link?: string;
+  device_fingerprint?: string;
+  push_token?: string;
+  engagement_warnings?: number;
+  missed_pod_warnings?: number;
+  reward_level?: RewardLevel;
+  total_score?: number;
+  last_pod_participation?: number;
+}
+
+export interface Folder {
+  id: string;
+  name: string;
+  icon: string;
+  party_id: string;
+}
+
+export interface Card {
+  id: string;
+  user_id: string;
+  creator_role: UserRole;
+  folder_id: string;
+  party_id: string;
+  display_name: string;
+  external_link: string;
+  external_link2?: string;
+  link1_label?: string;
+  link2_label?: string;
+  is_permanent?: boolean;
+  is_pinned?: boolean;
+  timestamp: number;
+  x?: number;
+  y?: number;
+}
+
+export interface InstructionBox {
+  id: string;
+  folder_id: string;
+  party_id: string;
+  content: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface Follow {
+  id: string;
+  follower_id: string;
+  target_card_id: string;
+  party_id: string;
+  timestamp: number;
+}
+
+export enum NotificationType {
+  FOLLOW = 'FOLLOW',
+  FOLLOW_BACK = 'FOLLOW_BACK',
+  SYSTEM_WARNING = 'SYSTEM_WARNING'
+}
+
+export interface AppNotification {
+  id: string;
+  recipient_id: string;
+  sender_id: string;
+  sender_name: string;
+  type: NotificationType;
+  related_card_id: string;
+  party_id: string;
+  timestamp: number;
+  read: boolean;
+}

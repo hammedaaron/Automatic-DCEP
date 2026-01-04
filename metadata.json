@@ -1,0 +1,8 @@
+{
+  "name": "Angel Community Engagement Pro",
+  "description": "A high-performance, card-based social connector platform that replaces chaotic follow-for-follow groups with structured folders, real-time follow-back tracking, and AI-powered profile optimization.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
