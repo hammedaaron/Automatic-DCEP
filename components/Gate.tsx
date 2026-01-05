@@ -8,9 +8,10 @@ import UserDocs from './UserDocs';
 
 interface GateProps {
   onAuth: (user: User) => void;
+  invitedHubId?: string | null;
 }
 
-const Gate: React.FC<GateProps> = ({ onAuth }) => {
+const Gate: React.FC<GateProps> = ({ onAuth, invitedHubId }) => {
   const [mode, setMode] = useState<'land' | 'admin-signup' | 'login' | 'success'>('land');
   const [partyName, setPartyName] = useState('');
   const [username, setUsername] = useState('');
@@ -33,6 +34,21 @@ const Gate: React.FC<GateProps> = ({ onAuth }) => {
     };
     checkHealth();
   }, []);
+
+  useEffect(() => {
+    if (invitedHubId) {
+      setMode('login');
+      const fetchInvitedParty = async () => {
+        try {
+          const p = await findParty(invitedHubId);
+          if (p) setPartyName(p.name);
+        } catch (err) {
+          console.error("Invited hub lookup failed");
+        }
+      };
+      fetchInvitedParty();
+    }
+  }, [invitedHubId]);
 
   const fetchExistingParties = async () => {
     try {
@@ -193,6 +209,7 @@ const Gate: React.FC<GateProps> = ({ onAuth }) => {
 
             <form onSubmit={mode === 'admin-signup' ? handleAdminSignup : handleLogin} className="bg-slate-900 border border-slate-800 p-6 sm:p-10 rounded-[2.5rem] shadow-2xl space-y-6">
               <div className="text-center">
+                {invitedHubId && <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-2">Joining Invited Hub</p>}
                 <h3 className="text-2xl font-black text-white uppercase tracking-tight">{mode === 'admin-signup' ? 'Hub Genesis' : 'Infiltrate Hub'}</h3>
                 <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mt-1">Identity verification required</p>
               </div>

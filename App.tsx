@@ -73,6 +73,7 @@ const App: React.FC = () => {
   const [isWorkflowMode, setIsWorkflowMode] = useState(false);
   const [toast, setToast] = useState<{message: string, type: 'success' | 'error'} | null>(null);
   const [socketStatus, setSocketStatus] = useState<'connected' | 'disconnected' | 'connecting'>('connecting');
+  const [invitedHubId, setInvitedHubId] = useState<string | null>(null);
 
   const lastAudit = useRef<number>(0);
   const cardsRef = useRef(cards);
@@ -82,6 +83,18 @@ const App: React.FC = () => {
   useEffect(() => { cardsRef.current = cards; }, [cards]);
   useEffect(() => { followsRef.current = follows; }, [follows]);
   useEffect(() => { activePartyRef.current = activeParty; }, [activeParty]);
+
+  // Check for invited hub in URL
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const hub = params.get('hub');
+    if (hub) {
+      setInvitedHubId(hub);
+      // Remove param from URL without refreshing
+      const newUrl = window.location.pathname + window.location.hash;
+      window.history.replaceState({}, '', newUrl);
+    }
+  }, []);
 
   // Persist current view to survive refreshes
   useEffect(() => {
@@ -304,10 +317,13 @@ const App: React.FC = () => {
   return (
     <AppContext.Provider value={contextValue}>
       {!currentUser ? (
-        <Gate onAuth={u => {
-          saveSession(u);
-          setCurrentUser(u);
-        }} />
+        <Gate 
+          invitedHubId={invitedHubId}
+          onAuth={u => {
+            saveSession(u);
+            setCurrentUser(u);
+          }} 
+        />
       ) : (
         <>
           <Layout onOpenCreateProfile={() => setIsCreateModalOpen(true)}>
