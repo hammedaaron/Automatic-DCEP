@@ -25,6 +25,7 @@ const Layout: React.FC<LayoutProps> = ({ children, onOpenCreateProfile }) => {
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [isParkingOpen, setIsParkingOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [networkQuality, setNetworkQuality] = useState<'good' | 'poor'>('good');
   
   const scrollRef = useRef<HTMLDivElement>(null);
   const parkingRef = useRef<HTMLDivElement>(null);
@@ -37,6 +38,46 @@ const Layout: React.FC<LayoutProps> = ({ children, onOpenCreateProfile }) => {
   const userHasProfile = cards.some(c => c.user_id === currentUser?.id && c.folder_id === selectedFolderId);
   const isSystemFolder = currentFolder?.party_id === SYSTEM_PARTY_ID;
   const isCreationDisabled = (userHasProfile && !isDev && !isAdmin) || (isSystemFolder && !isDev);
+
+  // Network Connectivity Sentimental Grading Logic
+  useEffect(() => {
+    const updateStatus = () => {
+      const isOnline = navigator.onLine;
+      const connection = (navigator as any).connection;
+      
+      if (!isOnline) {
+        setNetworkQuality('poor');
+        return;
+      }
+
+      if (connection) {
+        // '4g' is considered good, anything else (3g, 2g, slow-2g) is graded poor for real-time apps
+        const isFast = connection.effectiveType === '4g' && connection.rtt < 300;
+        setNetworkQuality(isFast ? 'good' : 'poor');
+      } else {
+        // Fallback for browsers without NetworkInformation API
+        setNetworkQuality('good');
+      }
+    };
+
+    window.addEventListener('online', updateStatus);
+    window.addEventListener('offline', updateStatus);
+    
+    const connection = (navigator as any).connection;
+    if (connection) {
+      connection.addEventListener('change', updateStatus);
+    }
+
+    updateStatus();
+
+    return () => {
+      window.removeEventListener('online', updateStatus);
+      window.removeEventListener('offline', updateStatus);
+      if (connection) {
+        connection.removeEventListener('change', updateStatus);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const scrollContainer = scrollRef.current;
@@ -67,7 +108,6 @@ const Layout: React.FC<LayoutProps> = ({ children, onOpenCreateProfile }) => {
     } catch (err) {
       showToast("Sync Failed", "error");
     } finally {
-      // Small delay for visual impact of the spin
       setTimeout(() => setIsRefreshing(false), 800);
     }
   };
@@ -83,26 +123,22 @@ const Layout: React.FC<LayoutProps> = ({ children, onOpenCreateProfile }) => {
     <div className={`flex h-screen overflow-hidden transition-all duration-500 ${isDark ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'} flex-col lg:flex-row`}>
       {isPoweredUp && <div className="fixed inset-0 power-up-bg opacity-10 z-0 pointer-events-none" />}
       
-      {/* SIDEBAR / FOLDER BROWSER */}
       <div className={`${activeTab === 'folders' ? 'fixed inset-0 z-50 flex' : 'hidden'} lg:relative lg:flex lg:h-full lg:z-20`}>
         <FolderSidebar onSelect={() => setActiveTab('community')} />
       </div>
 
-      {/* MAIN VIEWPORT */}
       <main className={`flex-1 flex flex-col h-full overflow-hidden z-10 relative ${activeTab === 'folders' ? 'hidden lg:flex' : 'flex'}`}>
         
-        {/* COMPACT HEADER */}
         <header className={`px-4 lg:px-8 py-3 lg:py-5 flex items-center justify-between sticky top-0 z-40 transition-all ${isDark ? 'bg-slate-900/80' : 'bg-white/90'} backdrop-blur-xl border-b ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
           <div className="flex items-center gap-3 lg:gap-6 flex-1 min-w-0">
             <h1 className="text-lg lg:text-3xl font-black tracking-tight truncate flex items-center gap-2 shrink-0 max-w-[140px] sm:max-w-none">
               <span className="truncate">{activeTab === 'leaderboard' ? 'Rankings' : currentFolderName}</span>
-              <div className="shrink-0 relative flex h-2 w-2" title={`Realtime: ${socketStatus}`}>
+              <div className="shrink-0 relative flex h-2 w-2" title={`Socket: ${socketStatus}`}>
                 <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${socketStatus === 'connected' ? 'bg-emerald-400' : 'bg-red-400'}`}></span>
                 <span className={`relative inline-flex rounded-full h-2 w-2 ${socketStatus === 'connected' ? 'bg-emerald-500' : 'bg-red-500'}`}></span>
               </div>
             </h1>
 
-            {/* Parking Button Integration */}
             {activeParty?.is_parking_enabled && (
               <div className="hidden sm:flex relative" ref={parkingRef}>
                 <button 
@@ -139,15 +175,23 @@ const Layout: React.FC<LayoutProps> = ({ children, onOpenCreateProfile }) => {
           </div>
 
           <div className="flex items-center gap-2 lg:gap-3 shrink-0">
-            {/* FORCE REFRESH BUTTON */}
+            {/* FORCE REFRESH BUTTON WITH NETWORK QUALITY SENTIMENTAL GRADING */}
             <button 
               onClick={handleManualRefresh} 
-              className={`p-2 lg:p-3 rounded-xl transition-all ${isDark ? 'bg-slate-800 text-slate-400 hover:text-white' : 'bg-slate-100 text-slate-500 hover:text-indigo-600'}`}
-              title="Force Sync Matrix"
+              className={`p-2 lg:p-3 rounded-xl transition-all relative border-2 ${
+                isDark ? 'bg-slate-800 hover:bg-slate-700' : 'bg-slate-100 hover:bg-slate-200 shadow-sm'
+              } ${
+                networkQuality === 'good' 
+                  ? 'border-emerald-500/50 text-emerald-500' 
+                  : 'border-red-500/50 text-red-500'
+              }`}
+              title={`Network: ${networkQuality === 'good' ? 'Strong Connection' : 'Poor Connection'}`}
             >
               <svg className={`w-4 h-4 lg:w-5 lg:h-5 ${isRefreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
+              {/* Optional: Small secondary status dot for enhanced visual cues */}
+              <span className={`absolute -top-1 -right-1 w-2 h-2 rounded-full ${networkQuality === 'good' ? 'bg-emerald-500' : 'bg-red-500'} shadow-[0_0_5px_currentColor] animate-pulse`}></span>
             </button>
 
             {isDev && (
@@ -172,12 +216,10 @@ const Layout: React.FC<LayoutProps> = ({ children, onOpenCreateProfile }) => {
           </div>
         </header>
 
-        {/* MAIN SCROLLABLE AREA */}
         <div ref={scrollRef} className="flex-1 overflow-y-auto custom-scrollbar p-4 lg:p-12 pb-32">
           {activeTab === 'leaderboard' ? <LeaderboardTable /> : children}
         </div>
 
-        {/* BOTTOM NAVIGATION (MOBILE ONLY) - OPTIMIZED FOR SAFE AREAS */}
         <nav className={`lg:hidden fixed bottom-0 left-0 right-0 z-[100] px-4 pb-8 pt-3 ${isDark ? 'bg-slate-950/95' : 'bg-white/95'} backdrop-blur-2xl border-t ${isDark ? 'border-slate-800' : 'border-slate-200'} flex items-center justify-around shadow-[0_-10px_40px_rgba(0,0,0,0.3)]`}>
           <button 
             onClick={() => setActiveTab('folders')}
@@ -209,11 +251,9 @@ const Layout: React.FC<LayoutProps> = ({ children, onOpenCreateProfile }) => {
           </button>
         </nav>
 
-        {/* Scroll Top Button */}
         <button onClick={scrollToTop} className={`fixed bottom-28 lg:bottom-12 right-6 lg:right-12 p-3 sm:p-4 rounded-full shadow-2xl transition-all duration-500 z-[90] border-2 group ${showScrollTop ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-10 scale-50 pointer-events-none'} ${isDev ? 'bg-emerald-500 border-emerald-400 text-white shadow-emerald-500/20' : 'bg-indigo-600 border-indigo-500 text-white shadow-indigo-500/20'}`} aria-label="Scroll to top"><svg className="w-5 h-5 lg:w-6 lg:h-6 transform group-hover:-translate-y-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="4" d="M5 10l7-7m0 0l7 7m-7-7v18" /></svg></button>
       </main>
 
-      {/* NOTIFICATION SIDE DRAWER */}
       <div className={`fixed inset-0 z-[150] transition-opacity duration-300 ${isNotifOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`} onClick={() => setIsNotifOpen(false)}>
         <div className="absolute inset-0 bg-slate-950/70 backdrop-blur-sm" />
         <div className={`absolute top-0 right-0 h-full w-full max-w-sm bg-white dark:bg-slate-900 shadow-[0_0_80px_rgba(0,0,0,0.5)] transition-transform duration-500 ease-out ${isNotifOpen ? 'translate-x-0' : 'translate-x-full'}`} onClick={(e) => e.stopPropagation()}>
