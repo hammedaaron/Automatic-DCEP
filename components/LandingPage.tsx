@@ -39,19 +39,22 @@ const LandingPage: React.FC<LandingPageProps> = ({ onCreate, onJoin }) => {
           DCEP is the system serious communities use to guarantee real engagement — not empty promises and ghost members.
         </p>
         
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4 px-4 sm:px-0">
-          <button 
-            onClick={onCreate}
-            className="w-full sm:w-auto px-8 lg:px-10 py-4 lg:py-5 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-2xl shadow-2xl shadow-indigo-500/40 transition-all hover:scale-105 active:scale-95 uppercase tracking-widest text-xs lg:text-sm"
-          >
-            Create a POD
-          </button>
-          <button 
-            onClick={onJoin}
-            className="w-full sm:w-auto px-8 lg:px-10 py-4 lg:py-5 bg-slate-900 border border-slate-800 text-white font-black rounded-2xl hover:border-emerald-500 transition-all hover:scale-105 active:scale-95 uppercase tracking-widest text-xs lg:text-sm"
-          >
-            Join an Active POD
-          </button>
+        <div className="flex flex-col items-center justify-center gap-8 pt-4 px-4 sm:px-0">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-6 w-full">
+            <button 
+              onClick={onCreate}
+              className="w-full sm:w-auto px-8 lg:px-10 py-4 lg:py-5 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-2xl shadow-2xl shadow-indigo-500/40 transition-all hover:scale-105 active:scale-95 uppercase tracking-widest text-xs lg:text-sm"
+            >
+              Create a POD
+            </button>
+
+            <button 
+              onClick={onJoin}
+              className="w-full sm:w-auto px-8 lg:px-10 py-4 lg:py-5 bg-slate-900 border border-slate-800 text-white font-black rounded-2xl hover:border-emerald-500 transition-all hover:scale-105 active:scale-95 uppercase tracking-widest text-xs lg:text-sm"
+            >
+              Join an Active POD
+            </button>
+          </div>
         </div>
 
         {/* Visual Mockup */}

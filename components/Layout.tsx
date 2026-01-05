@@ -15,15 +15,17 @@ interface LayoutProps {
 const Layout: React.FC<LayoutProps> = ({ children, onOpenCreateProfile }) => {
   const { 
     currentUser, theme, setTheme, isPoweredUp, 
-    selectedFolderId, folders, notifications,
+    selectedFolderId, folders, notifications, activeParty,
     isDev, isAdmin, cards, isWorkflowMode, setIsWorkflowMode, socketStatus
   } = useApp();
   
   const [activeTab, setActiveTab] = useState<'folders' | 'community' | 'leaderboard'>('community');
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const [showScrollTop, setShowScrollTop] = useState(false);
+  const [isParkingOpen, setIsParkingOpen] = useState(false);
   
   const scrollRef = useRef<HTMLDivElement>(null);
+  const parkingRef = useRef<HTMLDivElement>(null);
 
   const unreadNotifications = notifications.filter(n => n.recipient_id === currentUser?.id && !n.read).length;
   const currentFolder = folders.find(f => f.id === selectedFolderId);
@@ -42,7 +44,24 @@ const Layout: React.FC<LayoutProps> = ({ children, onOpenCreateProfile }) => {
     return () => scrollContainer.removeEventListener('scroll', handleScroll);
   }, []);
 
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (parkingRef.current && !parkingRef.current.contains(event.target as Node)) {
+        setIsParkingOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const scrollToTop = () => { scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' }); };
+
+  const freeSpots = React.useMemo(() => {
+    if (!activeParty) return 0;
+    const max = activeParty.max_slots || 50;
+    const currentMemberIds = new Set(cards.filter(c => c.party_id === activeParty.id).map(c => c.user_id));
+    return Math.max(0, max - currentMemberIds.size);
+  }, [activeParty, cards]);
 
   return (
     <div className={`flex h-screen overflow-hidden transition-all duration-500 ${isDark ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'} flex-col lg:flex-row`}>
@@ -66,6 +85,40 @@ const Layout: React.FC<LayoutProps> = ({ children, onOpenCreateProfile }) => {
                 <span className={`relative inline-flex rounded-full h-1.5 w-1.5 ${socketStatus === 'connected' ? 'bg-emerald-500' : 'bg-red-500'}`}></span>
               </div>
             </h1>
+
+            {/* Parking Button Integration */}
+            {activeParty?.is_parking_enabled && (
+              <div className="hidden md:flex relative" ref={parkingRef}>
+                <button 
+                  onClick={() => setIsParkingOpen(!isParkingOpen)}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${
+                    isParkingOpen ? 'bg-indigo-600 border-indigo-400 text-white shadow-lg' : 'bg-white/5 border-white/10 text-slate-400 hover:border-indigo-500'
+                  }`}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                  Check Available Parking
+                </button>
+                
+                {isParkingOpen && (
+                  <div className="absolute top-12 left-0 w-64 glass-card p-5 rounded-2xl border border-white/10 shadow-2xl animate-in slide-in-from-top-2 duration-300 z-50">
+                    <p className="text-[9px] font-black text-indigo-400 uppercase tracking-widest mb-4 border-b border-white/5 pb-2">POD CAPACITY STATUS</p>
+                    <div className="flex items-center justify-between mb-4">
+                      <span className="text-sm font-black text-white">{freeSpots} SPOTS OPEN</span>
+                      <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                    </div>
+                    <div className="max-h-48 overflow-y-auto custom-scrollbar space-y-1 mb-4 pr-1">
+                       {Array.from({ length: Math.min(freeSpots, 15) }).map((_, i) => (
+                         <div key={i} className="bg-white/5 p-2 rounded-lg text-[10px] font-bold text-slate-400 flex justify-between">
+                            <span>Parking Slot {100 + i}</span>
+                            <span className="text-emerald-400">OPEN</span>
+                         </div>
+                       ))}
+                    </div>
+                    <button className="w-full bg-indigo-600 py-3 rounded-xl text-[9px] font-black uppercase tracking-widest text-white shadow-lg hover:bg-indigo-700 transition-all">Invite New Node</button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-2 lg:gap-3">

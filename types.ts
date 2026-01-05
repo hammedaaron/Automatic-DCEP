@@ -25,6 +25,7 @@ export interface Party {
   timezone?: string;
   pod_sessions?: PodSession[];
   max_slots?: number;
+  is_parking_enabled?: boolean; // New feature toggle
 }
 
 export interface User {

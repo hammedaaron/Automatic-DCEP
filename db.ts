@@ -176,6 +176,10 @@ export const updatePartySessions = async (partyId: string, sessions: any[]) => {
   await supabase.from('parties').update({ pod_sessions: sessions }).eq('id', partyId);
 };
 
+export const updatePartyParkingStatus = async (partyId: string, status: boolean) => {
+  await supabase.from('parties').update({ is_parking_enabled: status }).eq('id', partyId);
+};
+
 export const getParties = async () => {
   const { data } = await supabase.from('parties').select('*').order('name');
   return (data || []) as Party[];
@@ -278,7 +282,7 @@ export const registerParty = async (partyName: string, adminPassword: string, ti
   if (!info) throw new Error("Invalid password format.");
   const existing = await findPartyByName(partyName);
   if (existing) throw new Error(`Community name taken.`);
-  const newParty: Party = { id: info.partyId, name: partyName.trim(), timezone, max_slots: 50, pod_sessions: [] };
+  const newParty: Party = { id: info.partyId, name: partyName.trim(), timezone, max_slots: 50, pod_sessions: [], is_parking_enabled: false };
   const fingerprint = await getFingerprint();
   const newAdmin: User = {
     id: `admin-${info.partyId}-${info.adminId}`,

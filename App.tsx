@@ -74,54 +74,17 @@ const App: React.FC = () => {
   const lastAudit = useRef<number>(0);
   const cardsRef = useRef(cards);
   const followsRef = useRef(follows);
+  const activePartyRef = useRef(activeParty);
 
   useEffect(() => { cardsRef.current = cards; }, [cards]);
   useEffect(() => { followsRef.current = follows; }, [follows]);
+  useEffect(() => { activePartyRef.current = activeParty; }, [activeParty]);
 
   const showToast = useCallback((message: any, type: 'success' | 'error' = 'success') => {
     let finalMsg = typeof message === 'string' ? message : message?.notification?.body || message?.message || "Notice";
     setToast({ message: finalMsg, type });
     setTimeout(() => setToast(null), 4000);
   }, []);
-
-  // 1. Handle Foreground Notifications
-  useEffect(() => {
-    onForegroundMessage((payload) => {
-      showToast(payload); 
-      syncData(); 
-    });
-  }, [showToast]);
-
-  const runAccountabilityAudit = useCallback(async () => {
-    if (currentUser?.role !== UserRole.ADMIN || !activeParty) return;
-    if (Date.now() - lastAudit.current < 60000) return; 
-    lastAudit.current = Date.now();
-
-    const { data: users } = await supabase.from('users').select('*').eq('party_id', activeParty.id);
-    if (!users) return;
-
-    for (const member of users) {
-      if (member.role !== UserRole.REGULAR) continue;
-      
-      const inbound = followsRef.current.filter(f => cardsRef.current.find(c => c.id === f.target_card_id)?.user_id === member.id).length;
-      const outbound = followsRef.current.filter(f => f.follower_id === member.id).length;
-
-      if (inbound - outbound > 3) {
-        const warnings = (member.engagement_warnings || 0) + 1;
-        if (warnings >= 4) {
-          await expelAndBanUser(member as User);
-          showToast(`JANITOR: Expelled ${member.name} for persistent leaching.`, "error");
-        } else {
-          await supabase.from('users').update({ engagement_warnings: warnings }).eq('id', member.id);
-          await addNotification({
-            recipient_id: member.id, sender_id: 'SYSTEM', sender_name: 'System Audit',
-            type: NotificationType.SYSTEM_WARNING, party_id: activeParty.id, related_card_id: ''
-          });
-          showToast(`JANITOR: Issued strike ${warnings}/4 to ${member.name}. Support gap detected.`);
-        }
-      }
-    }
-  }, [currentUser, activeParty, showToast]);
 
   const syncData = useCallback(async () => {
     const pid = currentUser?.party_id || SYSTEM_PARTY_ID;
@@ -139,57 +102,96 @@ const App: React.FC = () => {
     }
   }, [currentUser?.party_id]);
 
+  const runAccountabilityAudit = useCallback(async () => {
+    if (currentUser?.role !== UserRole.ADMIN || !activePartyRef.current) return;
+    if (Date.now() - lastAudit.current < 60000) return; 
+    lastAudit.current = Date.now();
+
+    const { data: users } = await supabase.from('users').select('*').eq('party_id', activePartyRef.current.id);
+    if (!users) return;
+
+    for (const member of users) {
+      if (member.role !== UserRole.REGULAR) continue;
+      
+      const inbound = followsRef.current.filter(f => cardsRef.current.find(c => c.id === f.target_card_id)?.user_id === member.id).length;
+      const outbound = followsRef.current.filter(f => f.follower_id === member.id).length;
+
+      if (inbound - outbound > 3) {
+        const warnings = (member.engagement_warnings || 0) + 1;
+        if (warnings >= 4) {
+          await expelAndBanUser(member as User);
+          showToast(`JANITOR: Expelled ${member.name} for persistent leaching.`, "error");
+        } else {
+          await supabase.from('users').update({ engagement_warnings: warnings }).eq('id', member.id);
+          await addNotification({
+            recipient_id: member.id, sender_id: 'SYSTEM', sender_name: 'System Audit',
+            type: NotificationType.SYSTEM_WARNING, party_id: activePartyRef.current.id, related_card_id: ''
+          });
+          showToast(`JANITOR: Issued strike ${warnings}/4 to ${member.name}. Support gap detected.`);
+        }
+      }
+    }
+  }, [currentUser?.role, showToast]);
+
+  useEffect(() => {
+    onForegroundMessage((payload) => {
+      showToast(payload); 
+      syncData(); 
+    });
+  }, [showToast, syncData]);
+
   useEffect(() => {
     if (!currentUser) return;
     syncData();
     const interval = setInterval(() => {
-      if (currentUser.role === UserRole.ADMIN) runAccountabilityAudit();
+      runAccountabilityAudit();
     }, 60000);
     return () => clearInterval(interval);
-  }, [currentUser?.id, syncData, runAccountabilityAudit]);
+  }, [currentUser?.id, currentUser?.party_id, syncData, runAccountabilityAudit]);
 
-  // 2. Defensive Push Registration logic
   useEffect(() => {
     const registerForPush = async () => {
       if (!currentUser) return;
       
       try {
+        if (!('serviceWorker' in navigator) || !('Notification' in window)) return;
+
         const messaging = await initMessaging();
         if (!messaging) return;
 
-        if ('serviceWorker' in navigator && 'Notification' in window) {
-          // Check for VAPID key
-          const vapidKey = (window as any).process.env.FIREBASE_VAPID_KEY;
-          if (!vapidKey || vapidKey.trim() === "") {
-             console.warn("FCM: Registration skipped - FIREBASE_VAPID_KEY is not set.");
-             return;
-          }
+        const vapidKey = (window as any).process.env.FIREBASE_VAPID_KEY;
+        if (!vapidKey) return;
 
-          const registration = await navigator.serviceWorker.register('/sw.js');
-          
-          if (Notification.permission === 'default') {
-            const permission = await Notification.requestPermission();
-            if (permission !== 'granted') return;
-          } else if (Notification.permission === 'denied') {
-            return;
-          }
+        // Ensure service worker is registered AND active
+        let registration = await navigator.serviceWorker.getRegistration('/sw.js');
+        if (!registration) {
+          registration = await navigator.serviceWorker.register('/sw.js');
+        }
 
-          const token = await getToken(messaging, { 
-            serviceWorkerRegistration: registration,
-            vapidKey 
-          });
+        // Wait for worker to be ready
+        await navigator.serviceWorker.ready;
 
-          if (token && token !== currentUser.push_token) {
-            await updatePushToken(currentUser.id, token);
-            setCurrentUser({ ...currentUser, push_token: token });
-          }
+        if (Notification.permission === 'default') {
+          const permission = await Notification.requestPermission();
+          if (permission !== 'granted') return;
+        }
+
+        const token = await getToken(messaging, { 
+          serviceWorkerRegistration: registration,
+          vapidKey 
+        });
+
+        if (token && token !== currentUser.push_token) {
+          await updatePushToken(currentUser.id, token);
+          setCurrentUser(prev => prev ? { ...prev, push_token: token } : null);
+          showToast("Push Notifications Active");
         }
       } catch (err) {
-        console.warn("FCM: Token retrieval was blocked or failed:", err);
+        console.warn("FCM: Setup incomplete. Likely insecure context or blocked IndexedDB.");
       }
     };
     registerForPush();
-  }, [currentUser?.id]);
+  }, [currentUser?.id, showToast]);
 
   useEffect(() => {
     if (!currentUser || !currentUser.party_id) return;
@@ -274,8 +276,6 @@ const App: React.FC = () => {
     socketStatus
   };
 
-  if (!currentUser) return <Gate onAuth={u => setCurrentUser(u)} />;
-
   const renderMainContent = () => {
     if (selectedFolderId === 'authority-table') return <AuthorityTable />;
     if (isWorkflowMode && currentUser?.role === UserRole.DEV) return <DevWorkflow folderId={selectedFolderId} />;
@@ -284,36 +284,42 @@ const App: React.FC = () => {
 
   return (
     <AppContext.Provider value={contextValue}>
-      <Layout onOpenCreateProfile={() => setIsCreateModalOpen(true)}>
-        {renderMainContent()}
-      </Layout>
-      {isCreateModalOpen && <CreateProfileModal 
-        onClose={() => setIsCreateModalOpen(false)} 
-        onSubmit={async (n, l1, l2) => {
-          const newCard: Card = {
-            id: Math.random().toString(36).substr(2, 9),
-            user_id: currentUser.id,
-            creator_role: currentUser.role,
-            folder_id: selectedFolderId!,
-            party_id: currentUser.party_id,
-            display_name: n,
-            external_link: l1,
-            external_link2: l2,
-            timestamp: Date.now(),
-            x: 0,
-            y: 0
-          };
-          await upsertCard(newCard);
-          showToast("Profile Established in Hub");
-          setIsCreateModalOpen(false);
-        }} 
-      />}
-      {editingCard && <EditProfileModal 
-        card={editingCard} 
-        onClose={() => setEditingCard(null)} 
-        onUpdate={updateCard} 
-        onDelete={deleteCard} 
-      />}
+      {!currentUser ? (
+        <Gate onAuth={u => setCurrentUser(u)} />
+      ) : (
+        <>
+          <Layout onOpenCreateProfile={() => setIsCreateModalOpen(true)}>
+            {renderMainContent()}
+          </Layout>
+          {isCreateModalOpen && <CreateProfileModal 
+            onClose={() => setIsCreateModalOpen(false)} 
+            onSubmit={async (n, l1, l2) => {
+              const newCard: Card = {
+                id: Math.random().toString(36).substr(2, 9),
+                user_id: currentUser.id,
+                creator_role: currentUser.role,
+                folder_id: selectedFolderId!,
+                party_id: currentUser.party_id,
+                display_name: n,
+                external_link: l1,
+                external_link2: l2,
+                timestamp: Date.now(),
+                x: 0,
+                y: 0
+              };
+              await upsertCard(newCard);
+              showToast("Profile Established in Hub");
+              setIsCreateModalOpen(false);
+            }} 
+          />}
+          {editingCard && <EditProfileModal 
+            card={editingCard} 
+            onClose={() => setEditingCard(null)} 
+            onUpdate={updateCard} 
+            onDelete={deleteCard} 
+          />}
+        </>
+      )}
       {toast && <Toast message={toast.message} type={toast.type} />}
     </AppContext.Provider>
   );

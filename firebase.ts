@@ -4,7 +4,6 @@ import { getMessaging, getToken, isSupported, onMessage } from "firebase/messagi
 
 const env = (window as any).process.env;
 
-// Only initialize if we have at least an API key
 const firebaseConfig = {
   apiKey: env.FIREBASE_API_KEY || "",
   authDomain: env.FIREBASE_AUTH_DOMAIN || "",
@@ -16,41 +15,46 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 
-let messaging: any = null;
+let messagingInstance: any = null;
 
 /**
  * Initializes messaging safely for the browser environment.
- * Validates config and browser support to prevent "Service messaging not available" errors.
  */
 export const initMessaging = async () => {
   try {
-    if (messaging) return messaging;
+    if (messagingInstance) return messagingInstance;
     
-    // 1. Check browser support (must be HTTPS or localhost)
+    // 1. Check basic browser support
     const supported = await isSupported();
-    if (!supported) {
-      console.warn("FCM: Browser environment does not support Cloud Messaging (Requires HTTPS).");
+    if (!supported) return null;
+
+    // 2. Explicit check for indexedDB (Firebase Messaging requirement)
+    if (!window.indexedDB) {
+      console.warn("FCM: IndexedDB is not supported or is blocked in this browser.");
       return null;
     }
 
-    // 2. Validate that we actually have the required sender ID
-    if (!firebaseConfig.messagingSenderId || firebaseConfig.messagingSenderId === "") {
-      console.warn("FCM: messagingSenderId is missing. Push notifications disabled.");
+    // 3. Check for secure context
+    if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
+      console.warn("FCM: Secure context (HTTPS) required for messaging.");
       return null;
     }
 
-    messaging = getMessaging(app);
-    return messaging;
+    // 4. Validate config
+    if (!firebaseConfig.messagingSenderId) return null;
+
+    try {
+      messagingInstance = getMessaging(app);
+      return messagingInstance;
+    } catch (innerError) {
+      // This is usually where "Service messaging is not available" is caught
+      return null;
+    }
   } catch (error) {
-    console.error("FCM: Initialization failed:", error);
     return null;
   }
 };
 
-/**
- * Listens for messages when the app is in the foreground.
- * Includes defensive checks to ensure messaging is active.
- */
 export const onForegroundMessage = (callback: (payload: any) => void) => {
   initMessaging().then(m => {
     if (m) {
@@ -59,7 +63,7 @@ export const onForegroundMessage = (callback: (payload: any) => void) => {
           callback(payload);
         });
       } catch (e) {
-        console.error("FCM: Could not attach foreground listener:", e);
+        console.warn("FCM: Could not attach foreground listener:", e);
       }
     }
   });
