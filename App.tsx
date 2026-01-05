@@ -43,6 +43,7 @@ interface AppContextType {
   isWorkflowMode: boolean;
   setIsWorkflowMode: (val: boolean) => void;
   socketStatus: 'connected' | 'disconnected' | 'connecting';
+  syncData: () => Promise<void>;
 }
 
 export const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -173,13 +174,11 @@ const App: React.FC = () => {
         const vapidKey = (window as any).process.env.FIREBASE_VAPID_KEY;
         if (!vapidKey) return;
 
-        // Ensure service worker is registered AND active
         let registration = await navigator.serviceWorker.getRegistration('/sw.js');
         if (!registration) {
           registration = await navigator.serviceWorker.register('/sw.js');
         }
 
-        // Wait for worker to be ready
         await navigator.serviceWorker.ready;
 
         if (Notification.permission === 'default') {
@@ -212,10 +211,13 @@ const App: React.FC = () => {
     channel
       .on('postgres_changes', { event: '*', schema: 'public', table: 'cards', filter: `party_id=eq.${pid}` }, () => syncData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'users', filter: `party_id=eq.${pid}` }, () => syncData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'folders', filter: `party_id=eq.${pid}` }, () => syncData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'folders', filter: `party_id=eq.${SYSTEM_PARTY_ID}` }, () => syncData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'follows', filter: `party_id=eq.${pid}` }, () => syncData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: `party_id=eq.${pid}` }, () => syncData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'instructions', filter: `party_id=eq.${pid}` }, () => syncData())
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'parties', filter: `id=eq.${pid}` }, () => syncData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'instructions', filter: `party_id=eq.${SYSTEM_PARTY_ID}` }, () => syncData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'parties', filter: `id=eq.${pid}` }, () => syncData())
       .subscribe((status) => {
         setSocketStatus(status === 'SUBSCRIBED' ? 'connected' : 'disconnected');
       });
@@ -290,7 +292,7 @@ const App: React.FC = () => {
     follows, toggleFollow, notifications, instructions, markNotificationRead,
     selectedFolderId, setSelectedFolderId, deleteCard, updateCard, searchQuery, setSearchQuery,
     theme, setTheme, isPoweredUp, setIsPoweredUp, showToast, isWorkflowMode, setIsWorkflowMode,
-    socketStatus
+    socketStatus, syncData
   };
 
   const renderMainContent = () => {
@@ -302,7 +304,10 @@ const App: React.FC = () => {
   return (
     <AppContext.Provider value={contextValue}>
       {!currentUser ? (
-        <Gate onAuth={u => setCurrentUser(u)} />
+        <Gate onAuth={u => {
+          saveSession(u);
+          setCurrentUser(u);
+        }} />
       ) : (
         <>
           <Layout onOpenCreateProfile={() => setIsCreateModalOpen(true)}>

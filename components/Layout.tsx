@@ -16,13 +16,15 @@ const Layout: React.FC<LayoutProps> = ({ children, onOpenCreateProfile }) => {
   const { 
     currentUser, theme, setTheme, isPoweredUp, 
     selectedFolderId, folders, notifications, activeParty,
-    isDev, isAdmin, cards, isWorkflowMode, setIsWorkflowMode, socketStatus
+    isDev, isAdmin, cards, isWorkflowMode, setIsWorkflowMode, 
+    socketStatus, syncData, showToast
   } = useApp();
   
   const [activeTab, setActiveTab] = useState<'folders' | 'community' | 'leaderboard'>('community');
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [isParkingOpen, setIsParkingOpen] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   
   const scrollRef = useRef<HTMLDivElement>(null);
   const parkingRef = useRef<HTMLDivElement>(null);
@@ -55,6 +57,20 @@ const Layout: React.FC<LayoutProps> = ({ children, onOpenCreateProfile }) => {
   }, []);
 
   const scrollToTop = () => { scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' }); };
+
+  const handleManualRefresh = async () => {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    try {
+      await syncData();
+      showToast("Hub Synchronized");
+    } catch (err) {
+      showToast("Sync Failed", "error");
+    } finally {
+      // Small delay for visual impact of the spin
+      setTimeout(() => setIsRefreshing(false), 800);
+    }
+  };
 
   const freeSpots = React.useMemo(() => {
     if (!activeParty) return 0;
@@ -123,6 +139,17 @@ const Layout: React.FC<LayoutProps> = ({ children, onOpenCreateProfile }) => {
           </div>
 
           <div className="flex items-center gap-2 lg:gap-3 shrink-0">
+            {/* FORCE REFRESH BUTTON */}
+            <button 
+              onClick={handleManualRefresh} 
+              className={`p-2 lg:p-3 rounded-xl transition-all ${isDark ? 'bg-slate-800 text-slate-400 hover:text-white' : 'bg-slate-100 text-slate-500 hover:text-indigo-600'}`}
+              title="Force Sync Matrix"
+            >
+              <svg className={`w-4 h-4 lg:w-5 lg:h-5 ${isRefreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </button>
+
             {isDev && (
               <button onClick={() => setIsWorkflowMode(!isWorkflowMode)} className={`p-2 lg:p-2.5 rounded-xl transition-all border-2 ${isWorkflowMode ? 'bg-emerald-500 border-emerald-400 text-white shadow-lg' : 'bg-slate-800 border-slate-700 text-slate-400'}`} title="Design Canvas">
                 <svg className="w-4 h-4 lg:w-5 lg:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" /></svg>
