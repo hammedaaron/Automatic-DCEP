@@ -4,21 +4,26 @@ import React from 'react';
 interface LandingPageProps {
   onCreate: () => void;
   onJoin: () => void;
+  matrixStatus?: 'checking' | 'connected' | 'error';
 }
 
-const LandingPage: React.FC<LandingPageProps> = ({ onCreate, onJoin }) => {
+const LandingPage: React.FC<LandingPageProps> = ({ onCreate, onJoin, matrixStatus = 'connected' }) => {
   return (
     <div className="relative w-full max-w-6xl mx-auto px-4 pt-4 lg:pt-6 pb-20 space-y-12 lg:space-y-20 overflow-x-hidden">
       
       {/* BRAND HEADER */}
       <header className="flex justify-center mb-2 animate-in fade-in slide-in-from-top-4 duration-700">
         <div className="group flex items-center gap-3 py-2 px-5 rounded-3xl bg-white/5 border border-white/10 backdrop-blur-md transition-all hover:border-indigo-500/50">
-          <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-black text-xl shadow-lg shadow-indigo-500/20 group-hover:rotate-12 transition-transform">
+          <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white font-black text-xl shadow-lg group-hover:rotate-12 transition-all duration-500 ${
+            matrixStatus === 'connected' ? 'bg-emerald-500 shadow-emerald-500/20' : 
+            matrixStatus === 'error' ? 'bg-red-500 shadow-red-500/20' : 
+            'bg-indigo-600 shadow-indigo-500/20'
+          }`}>
             C
           </div>
           <div className="flex flex-col items-start leading-none">
             <h2 className="text-[10px] sm:text-xs font-black text-white uppercase tracking-[0.15em] brand-glow">
-              Community Engagement Pro - <span className="text-indigo-400">DCEP</span>
+              Community Engagement Pro - <span className={matrixStatus === 'connected' ? 'text-emerald-400' : 'text-indigo-400'}>DCEP</span>
             </h2>
           </div>
         </div>

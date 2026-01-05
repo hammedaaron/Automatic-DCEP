@@ -1,0 +1,22 @@
+
+{
+  "name": "Connector Pro",
+  "short_name": "DCEP",
+  "description": "Next-Gen Community Accountability & Engagement Hub",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#4f46e5",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='25' fill='%234f46e5'/%3E%3Cpath d='M35 30 L65 30 L65 40 L45 40 L45 60 L65 60 L65 70 L35 70 Z' fill='white'/%3E%3Ccircle cx='70' cy='50' r='8' fill='%2300ff9d'/%3E%3C/svg%3E",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='25' fill='%234f46e5'/%3E%3Cpath d='M35 30 L65 30 L65 40 L45 40 L45 60 L65 60 L65 70 L35 70 Z' fill='white'/%3E%3Ccircle cx='70' cy='50' r='8' fill='%2300ff9d'/%3E%3C/svg%3E",
+      "sizes": "512x512",
+      "type": "image/svg+xml"
+    }
+  ]
+}

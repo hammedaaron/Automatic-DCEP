@@ -3,9 +3,21 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Connector Pro | Next-Gen Community Hub</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='25' fill='%234f46e5'/%3E%3Cpath d='M50 15L25 55h20l-5 30 35-45H50l5-25z' fill='white'/%3E%3C/svg%3E">
+  
+  <!-- Favicon and App Icons -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='25' fill='%234f46e5'/%3E%3Cpath d='M35 30 L65 30 L65 40 L45 40 L45 60 L65 60 L65 70 L35 70 Z' fill='white'/%3E%3Ccircle cx='70' cy='50' r='8' fill='%2300ff9d'/%3E%3C/svg%3E">
+  <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='25' fill='%234f46e5'/%3E%3Cpath d='M35 30 L65 30 L65 40 L45 40 L45 60 L65 60 L65 70 L35 70 Z' fill='white'/%3E%3Ccircle cx='70' cy='50' r='8' fill='%2300ff9d'/%3E%3C/svg%3E">
+  
+  <!-- Mobile Web App Meta Tags -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Connector Pro">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#0f172a">
+  <link rel="manifest" href="manifest.json">
+
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -14,15 +26,20 @@
     body {
       font-family: 'Outfit', sans-serif;
       transition: background-color 0.4s ease, color 0.4s ease;
+      word-break: break-word;
+      overflow-wrap: break-word;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
     }
     .custom-scrollbar::-webkit-scrollbar {
-      width: 5px;
+      width: 4px;
+      height: 4px;
     }
     .custom-scrollbar::-webkit-scrollbar-track {
       background: transparent;
     }
     .custom-scrollbar::-webkit-scrollbar-thumb {
-      background: rgba(99, 102, 241, 0.2);
+      background: rgba(99, 102, 241, 0.3);
       border-radius: 20px;
     }
     .power-up-bg {
@@ -96,6 +113,23 @@
     .brand-glow {
       text-shadow: 0 0 20px rgba(99, 102, 241, 0.3);
     }
+    .text-truncate-2 {
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    /* Prevents layout shifts on mobile */
+    input, button {
+      touch-action: manipulation;
+    }
+    /* iOS Safe Area Support */
+    header {
+      padding-top: max(0.75rem, env(safe-area-inset-top));
+    }
+    nav {
+      padding-bottom: max(2rem, env(safe-area-inset-bottom));
+    }
   </style>
   <script>
     window.process = {
@@ -103,7 +137,6 @@
         API_KEY: "AIzaSyATnmP8W_QgmmV-i0dDqWY8wau0OhU87JQ",
         SUPABASE_URL: "https://qfafrnedebyywisnhbmb.supabase.co",
         SUPABASE_ANON_KEY: "sb_publishable_YPahtxrQvXh2cmYivG8cSg_dse-4olx",
-        // Updated Firebase Config with user credentials
         FIREBASE_API_KEY: "AIzaSyDhGbJIKXIivZpu5AlOhx5-AN71M4T3--U",
         FIREBASE_AUTH_DOMAIN: "dcep-push-a2127.firebaseapp.com",
         FIREBASE_PROJECT_ID: "dcep-push-a2127",
@@ -129,7 +162,7 @@
 }
 </script>
 </head>
-<body class="light">
+<body class="light overflow-x-hidden bg-slate-50 dark:bg-slate-950">
   <div id="root"></div>
   <script type="module" src="index.tsx"></script>
 </body>

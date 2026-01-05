@@ -53,6 +53,8 @@ export const useApp = () => {
   return context;
 };
 
+const VIEW_STORAGE_KEY = 'connector_pro_v3_current_view';
+
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(() => getSession());
   const [activeParty, setActiveParty] = useState<Party | null>(null);
@@ -61,7 +63,7 @@ const App: React.FC = () => {
   const [follows, setFollows] = useState<Follow[]>([]);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [instructions, setInstructions] = useState<InstructionBox[]>([]);
-  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
+  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(() => localStorage.getItem(VIEW_STORAGE_KEY));
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editingCard, setEditingCard] = useState<Card | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -79,6 +81,15 @@ const App: React.FC = () => {
   useEffect(() => { cardsRef.current = cards; }, [cards]);
   useEffect(() => { followsRef.current = follows; }, [follows]);
   useEffect(() => { activePartyRef.current = activeParty; }, [activeParty]);
+
+  // Persist current view to survive refreshes
+  useEffect(() => {
+    if (selectedFolderId) {
+      localStorage.setItem(VIEW_STORAGE_KEY, selectedFolderId);
+    } else {
+      localStorage.removeItem(VIEW_STORAGE_KEY);
+    }
+  }, [selectedFolderId]);
 
   const showToast = useCallback((message: any, type: 'success' | 'error' = 'success') => {
     let finalMsg = typeof message === 'string' ? message : message?.notification?.body || message?.message || "Notice";
@@ -204,6 +215,7 @@ const App: React.FC = () => {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'follows', filter: `party_id=eq.${pid}` }, () => syncData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: `party_id=eq.${pid}` }, () => syncData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'instructions', filter: `party_id=eq.${pid}` }, () => syncData())
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'parties', filter: `id=eq.${pid}` }, () => syncData())
       .subscribe((status) => {
         setSocketStatus(status === 'SUBSCRIBED' ? 'connected' : 'disconnected');
       });
@@ -265,7 +277,12 @@ const App: React.FC = () => {
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
   };
 
-  const logout = () => { saveSession(null); setCurrentUser(null); setActiveParty(null); };
+  const logout = () => { 
+    saveSession(null); 
+    localStorage.removeItem(VIEW_STORAGE_KEY);
+    setCurrentUser(null); 
+    setActiveParty(null); 
+  };
 
   const contextValue: AppContextType = {
     currentUser, setCurrentUser, activeParty, isAdmin: currentUser?.role === UserRole.ADMIN,

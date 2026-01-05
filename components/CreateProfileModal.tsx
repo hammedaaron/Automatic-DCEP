@@ -3,7 +3,6 @@ import React, { useState, useMemo } from 'react';
 import { useApp } from '../App';
 import { UserRole } from '../types';
 import { optimizeIdentity } from '../services/gemini';
-// Fix: removed non-existent getInTimeZone import from db.ts
 import { getCalendarDaysBetween, isPodSessionActive } from '../db';
 
 interface CreateProfileModalProps {
@@ -25,6 +24,16 @@ const CreateProfileModal: React.FC<CreateProfileModalProps> = ({ onClose, onSubm
   const tz = activeParty?.timezone || 'UTC';
   const sessionStatus = useMemo(() => isPodSessionActive(activeParty), [activeParty]);
 
+  // Calculate the next reset time for the UI
+  const nextResetDisplay = useMemo(() => {
+    if (!activeParty?.pod_sessions?.length) return "24h";
+    const sorted = [...activeParty.pod_sessions].sort((a, b) => a.start.localeCompare(b.start));
+    const [h, m] = sorted[0].start.split(':').map(Number);
+    let rh = h - 1;
+    if (rh < 0) rh = 23;
+    return `${rh.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+  }, [activeParty]);
+
   const userTodayCardsInFolder = cards.filter(c => 
     c.user_id === currentUser?.id && 
     c.folder_id === selectedFolderId && 
@@ -37,10 +46,7 @@ const CreateProfileModal: React.FC<CreateProfileModalProps> = ({ onClose, onSubm
   );
 
   const handlePost = () => {
-    if (!sessionStatus.active && !isDev) {
-      showToast("POD CLOSED: Participation only allowed during active session windows.", "error");
-      return;
-    }
+    // Note: Participation is now allowed anytime, but we check rate limits.
     if (reachedRateLimit) {
       showToast(`Daily limit reached for this community.`, "error");
       return;
@@ -61,19 +67,30 @@ const CreateProfileModal: React.FC<CreateProfileModalProps> = ({ onClose, onSubm
         <div className="px-10 py-8 flex items-center justify-between">
           <div className="flex flex-col">
             <h3 className={`font-black text-2xl ${isDark ? 'text-white' : 'text-slate-900'}`}>Join Hub</h3>
-            {!sessionStatus.active && !isDev && <p className="text-red-500 text-[10px] font-black uppercase mt-1">Pod Windows Inactive</p>}
+            <p className="text-[10px] font-black text-slate-500 uppercase mt-1 tracking-widest">Protocol: Identity Submission</p>
           </div>
           <button onClick={onClose} className="p-3 text-slate-500"><svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M6 18L18 6M6 6l12 12" /></svg></button>
         </div>
         
         <div className="px-10 pb-10 space-y-6">
+          <div className="p-4 bg-indigo-500/5 border border-indigo-500/10 rounded-2xl">
+            <div className="flex justify-between items-center">
+              <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Lifespan Protocol</span>
+              <span className="text-[9px] font-black text-indigo-500 uppercase">Resets Daily @ {nextResetDisplay}</span>
+            </div>
+            <p className="text-[10px] text-slate-400 mt-1 font-medium">
+              You are posting in the {sessionStatus.active ? "ACTIVE POD" : "OFF-HOUR"} window. 
+              Your card remains valid until the next morning reset.
+            </p>
+          </div>
+
           <input placeholder="Display Name" value={name} onChange={e => setName(e.target.value)} className="w-full bg-slate-800 text-white rounded-2xl px-6 py-4 font-bold outline-none border border-slate-700" />
           <input placeholder="Primary Link" value={link1} onChange={e => setLink1(e.target.value)} className="w-full bg-slate-800 text-white rounded-2xl px-6 py-4 font-bold outline-none border border-slate-700" />
           <input placeholder="Secondary Link" value={link2} onChange={e => setLink2(e.target.value)} className="w-full bg-slate-800 text-white rounded-2xl px-6 py-4 font-bold outline-none border border-slate-700" />
           
           <div className="flex gap-4">
             <button onClick={onClose} className="flex-1 py-5 text-slate-500 font-black">Cancel</button>
-            <button onClick={handlePost} disabled={(!sessionStatus.active && !isDev) || reachedRateLimit} className="flex-1 py-5 bg-indigo-600 text-white font-black rounded-2xl shadow-xl disabled:opacity-30">Join Feed</button>
+            <button onClick={handlePost} disabled={reachedRateLimit} className="flex-1 py-5 bg-indigo-600 text-white font-black rounded-2xl shadow-xl disabled:opacity-30">Join Feed</button>
           </div>
         </div>
       </div>

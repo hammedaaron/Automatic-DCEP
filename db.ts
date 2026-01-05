@@ -23,6 +23,16 @@ export const getFingerprint = async (): Promise<string> => {
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 };
 
+export const checkDatabaseHealth = async () => {
+  try {
+    const { data, error } = await supabase.from('parties').select('count').limit(1);
+    if (error) throw error;
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, message: e.message };
+  }
+};
+
 export const isUserBanned = async (partyId: string, username: string): Promise<boolean> => {
   try {
     const fingerprint = await getFingerprint();
@@ -58,6 +68,60 @@ export const isPodSessionActive = (party: Party | null): { active: boolean; sess
     }
   }
   return { active: false };
+};
+
+/**
+ * Calculates real-time countdowns and status for Admin UI.
+ */
+export const getHubCycleInfo = (party: Party | null) => {
+  if (!party || !party.pod_sessions || party.pod_sessions.length === 0) {
+    return { status: 'ALWAYS_OPEN', timeRemaining: null, nextReset: 'Rolling 24h' };
+  }
+
+  const tz = party.timezone || 'UTC';
+  const nowInTz = new Date(new Intl.DateTimeFormat('en-US', { timeZone: tz }).format(new Date()));
+  const currentMinutes = nowInTz.getHours() * 60 + nowInTz.getMinutes();
+
+  const sortedSessions = [...party.pod_sessions].sort((a, b) => a.start.localeCompare(b.start));
+  const firstPodStart = sortedSessions[0].start;
+  const [h, m] = firstPodStart.split(':').map(Number);
+  let resetMinutes = (h * 60 + m) - 60; 
+  if (resetMinutes < 0) resetMinutes += 1440;
+
+  let activeSession = null;
+  let nextSession = null;
+
+  for (const session of sortedSessions) {
+    const [sH, sM] = session.start.split(':').map(Number);
+    const [eH, eM] = session.end.split(':').map(Number);
+    const sMin = sH * 60 + sM;
+    const eMin = eH * 60 + eM;
+
+    if (currentMinutes >= sMin && currentMinutes <= eMin) {
+      activeSession = { ...session, remaining: eMin - currentMinutes };
+      break;
+    }
+    if (sMin > currentMinutes && !nextSession) {
+      nextSession = { ...session, countdown: sMin - currentMinutes };
+    }
+  }
+
+  // If no next session today, the next one is the first session tomorrow
+  if (!activeSession && !nextSession) {
+    const [sH, sM] = sortedSessions[0].start.split(':').map(Number);
+    nextSession = { ...sortedSessions[0], countdown: (1440 - currentMinutes) + (sH * 60 + sM) };
+  }
+
+  const minsToReset = currentMinutes < resetMinutes 
+    ? resetMinutes - currentMinutes 
+    : (1440 - currentMinutes) + resetMinutes;
+
+  return {
+    activeSession,
+    nextSession,
+    resetIn: minsToReset,
+    resetTimeFormatted: `${Math.floor(resetMinutes / 60).toString().padStart(2, '0')}:${(resetMinutes % 60).toString().padStart(2, '0')}`
+  };
 };
 
 // --- REWARD LOGIC ---
@@ -104,9 +168,34 @@ export const getCalendarDaysBetween = (start: number, end: number, tz: string = 
 
 export const isCardExpired = (card: Card, party: Party | null) => {
   if (card.is_permanent) return false;
-  const tz = party?.timezone || 'UTC';
-  const daysPassed = getCalendarDaysBetween(card.timestamp, Date.now(), tz);
-  return daysPassed > 1;
+  
+  if (!party || !party.pod_sessions || party.pod_sessions.length === 0) {
+    return (Date.now() - card.timestamp) > (24 * 60 * 60 * 1000);
+  }
+
+  const tz = party.timezone || 'UTC';
+  const sortedSessions = [...party.pod_sessions].sort((a, b) => a.start.localeCompare(b.start));
+  const firstPodStart = sortedSessions[0].start;
+  const [h, m] = firstPodStart.split(':').map(Number);
+  let resetMinutes = (h * 60 + m) - 60; 
+  if (resetMinutes < 0) resetMinutes += 1440;
+
+  const nowInTz = new Date(new Intl.DateTimeFormat('en-US', { timeZone: tz }).format(new Date()));
+  const cardInTz = new Date(new Intl.DateTimeFormat('en-US', { timeZone: tz }).format(new Date(card.timestamp)));
+
+  const nowTotalMins = nowInTz.getHours() * 60 + nowInTz.getMinutes();
+  const cardTotalMins = cardInTz.getHours() * 60 + cardInTz.getMinutes();
+
+  const getCycleId = (date: Date, totalMins: number, resetMins: number) => {
+    const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const dayTimestamp = Math.floor(d.getTime() / (1000 * 60 * 60 * 24));
+    return totalMins < resetMins ? dayTimestamp - 1 : dayTimestamp;
+  };
+
+  const currentCycle = getCycleId(nowInTz, nowTotalMins, resetMinutes);
+  const cardCycle = getCycleId(cardInTz, cardTotalMins, resetMinutes);
+
+  return cardCycle < currentCycle;
 };
 
 // --- DATABASE OPERATIONS ---
@@ -174,6 +263,16 @@ export const deleteUser = async (id: string) => {
 
 export const updatePartySessions = async (partyId: string, sessions: any[]) => {
   await supabase.from('parties').update({ pod_sessions: sessions }).eq('id', partyId);
+};
+
+export const purgePartyCards = async (partyId: string) => {
+  const { error } = await supabase
+    .from('cards')
+    .delete()
+    .eq('party_id', partyId)
+    .eq('is_permanent', false);
+  
+  if (error) throw error;
 };
 
 export const updatePartyParkingStatus = async (partyId: string, status: boolean) => {
@@ -279,9 +378,14 @@ export const validateDevPassword = (password: string) => {
 
 export const registerParty = async (partyName: string, adminPassword: string, timezone: string = 'UTC') => {
   const info = validateAdminPassword(adminPassword);
-  if (!info) throw new Error("Invalid password format.");
+  if (!info) throw new Error("Invalid password format. Must be HamstarXXY.");
+  
   const existing = await findPartyByName(partyName);
-  if (existing) throw new Error(`Community name taken.`);
+  if (existing) throw new Error(`Community name '${partyName}' already exists in Matrix.`);
+  
+  const existingById = await findParty(info.partyId);
+  if (existingById) throw new Error(`ID ${info.partyId} is already assigned to Hub: ${existingById.name}`);
+
   const newParty: Party = { id: info.partyId, name: partyName.trim(), timezone, max_slots: 50, pod_sessions: [], is_parking_enabled: false };
   const fingerprint = await getFingerprint();
   const newAdmin: User = {
@@ -292,8 +396,16 @@ export const registerParty = async (partyName: string, adminPassword: string, ti
     party_id: info.partyId,
     device_fingerprint: fingerprint
   };
-  await supabase.from('parties').insert([newParty]);
-  await supabase.from('users').insert([newAdmin]);
+
+  const { error: partyError } = await supabase.from('parties').insert([newParty]);
+  if (partyError) throw new Error(`Supabase Error establishing Hub: ${partyError.message}`);
+
+  const { error: userError } = await supabase.from('users').insert([newAdmin]);
+  if (userError) {
+    await supabase.from('parties').delete().eq('id', info.partyId);
+    throw new Error(`Supabase Error registering Admin: ${userError.message}`);
+  }
+
   return { party: newParty, admin: newAdmin };
 };
 
@@ -306,7 +418,8 @@ export const loginUser = async (username: string, password: string, partyId: str
 };
 
 export const registerUser = async (user: User) => {
-  await supabase.from('users').insert([user]);
+  const { error } = await supabase.from('users').insert([user]);
+  if (error) throw new Error(`Supabase User Registration failed: ${error.message}`);
   return user;
 };
 
