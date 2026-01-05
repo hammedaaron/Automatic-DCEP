@@ -106,8 +106,13 @@ const UserCard: React.FC<UserCardProps> = ({ card, onEdit }) => {
   };
   
   const isPinned = card.is_pinned;
-  // Refined background to ensure pure white (no ash/grey) in light mode
-  const themeClasses = isPoweredUp ? 'glass-card shimmer' : isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)]';
+  // Strictly 'bg-white' for light mode to ensure a "clear" (non-ash) look
+  const themeClasses = isPoweredUp 
+    ? 'glass-card shimmer' 
+    : isDark 
+      ? 'bg-slate-900 border-slate-800 shadow-xl' 
+      : 'bg-white border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)]';
+  
   const borderClasses = isPinned ? 'ring-2 ring-indigo-500 border-transparent shadow-[0_20px_50px_rgba(79,70,229,0.1)]' : '';
   
   return (
