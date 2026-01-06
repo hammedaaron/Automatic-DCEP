@@ -1,4 +1,3 @@
-
 import React, { useMemo, useState } from 'react';
 import { Card, UserRole } from '../types';
 import { useApp } from '../App';
@@ -27,14 +26,10 @@ const UserCard: React.FC<UserCardProps> = ({ card, onEdit }) => {
 
   const isMutual = isFollowed && followsMe;
   const isDevOwned = card.creator_role === UserRole.DEV;
-  const isAdminOwned = card.creator_role === UserRole.ADMIN;
 
   const canManage = useMemo(() => {
     if (isDev) return true;
-    if (isAdmin) {
-      if (isDevOwned) return false;
-      return true;
-    }
+    if (isAdmin) return !isDevOwned;
     return isOwnCard;
   }, [isDev, isAdmin, isDevOwned, isOwnCard]);
 
@@ -54,165 +49,94 @@ const UserCard: React.FC<UserCardProps> = ({ card, onEdit }) => {
   };
 
   const tz = activeParty?.timezone || 'UTC';
-  const now = Date.now();
-
   const stabilityStatus = useMemo(() => {
     if (card.is_permanent) return '∞ PERMANENT';
-    const daysPassed = getCalendarDaysBetween(card.timestamp, now, tz);
+    const daysPassed = getCalendarDaysBetween(card.timestamp, Date.now(), tz);
     if (daysPassed === 0) return 'STABLE';
     if (daysPassed === 1) return 'EXPIRING';
     return 'EXPIRED';
-  }, [card.is_permanent, card.timestamp, now, tz]);
+  }, [card.is_permanent, card.timestamp, tz]);
 
   const hasLink2 = !!card.external_link2 && card.external_link2.trim().length > 0;
   const allLinksVisited = visited1 && (!hasLink2 || visited2);
 
-  const absoluteLink1 = useMemo(() => {
-    const url = card.external_link?.trim();
-    if (!url) return '#';
-    return url.startsWith('http') ? url : `https://${url}`;
-  }, [card.external_link]);
-
-  const absoluteLink2 = useMemo(() => {
-    const url = card.external_link2?.trim();
-    if (!url) return '#';
-    return url.startsWith('http') ? url : `https://${url}`;
-  }, [card.external_link2]);
-
   const stats = useMemo(() => {
-    if (!activeParty) return { followers: 0, following: 0 };
     const targetUserCards = cards.filter(c => c.user_id === card.user_id).map(c => c.id);
-    const uniqueFollowers = new Set(
-      follows.filter(f => targetUserCards.includes(f.target_card_id) && f.party_id === activeParty.id).map(f => f.follower_id)
-    ).size;
-    const uniqueFollowing = new Set(
-      follows.filter(f => f.follower_id === card.user_id && f.party_id === activeParty.id)
-        .map(f => cards.find(c => c.id === f.target_card_id)?.user_id)
-        .filter(id => id !== undefined)
-    ).size;
-    return { followers: uniqueFollowers, following: uniqueFollowing };
-  }, [follows, card.user_id, activeParty, cards]);
+    const followers = new Set(follows.filter(f => targetUserCards.includes(f.target_card_id)).map(f => f.follower_id)).size;
+    const following = new Set(follows.filter(f => f.follower_id === card.user_id)).size;
+    return { followers, following };
+  }, [follows, card.user_id, cards]);
 
   const handleEngageToggle = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!isFollowed && !allLinksVisited) {
-      const missing = !visited1 ? (card.link1_label || "Post 1") : (card.link2_label || "Post 2");
-      showToast(`Verify ${missing} first.`, "error");
+      showToast(`Verify content links first.`, "error");
       return;
     }
-    if (isFollowed) {
-      if (window.confirm(`Stop engaging with ${card.display_name}?`)) toggleFollow(card.id);
-    } else { toggleFollow(card.id); }
+    toggleFollow(card.id);
   };
   
-  const isPinned = card.is_pinned;
-  // Strictly 'bg-white' for light mode to ensure a "clear" (non-ash) look
-  const themeClasses = isPoweredUp 
-    ? 'glass-card shimmer' 
-    : isDark 
-      ? 'bg-slate-900 border-slate-800 shadow-xl' 
-      : 'bg-white border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)]';
-  
-  const borderClasses = isPinned ? 'ring-2 ring-indigo-500 border-transparent shadow-[0_20px_50px_rgba(79,70,229,0.1)]' : '';
+  const themeClasses = isPoweredUp ? 'glass-card shimmer' : isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100';
   
   return (
-    <div 
-      id={`card-${card.id}`}
-      className={`relative rounded-[2.5rem] p-5 sm:p-6 transition-all duration-500 flex flex-col h-full border z-10 overflow-hidden ${themeClasses} ${borderClasses} ${isFollowed ? 'opacity-85' : 'hover:-translate-y-2 hover:shadow-2xl'}`}
-    >
-      {isDevOwned && <div className="star-dust"></div>}
+    <div className={`relative rounded-[2rem] p-5 sm:p-6 transition-all duration-500 flex flex-col h-full border z-10 ${themeClasses} ${card.is_pinned ? 'ring-2 ring-indigo-500 shadow-xl' : 'shadow-sm'}`}>
       <div className="flex flex-col h-full relative z-20">
-        <div className="flex items-start justify-between mb-4 sm:mb-5 gap-2">
-          <div className="flex items-center gap-3 min-w-0 flex-1">
-            <div className={`w-12 h-12 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center font-black text-lg sm:text-xl border-2 shrink-0 transition-all ${
-              isDevOwned ? 'bg-emerald-500 text-white border-emerald-400' : 
-              isAdminOwned ? 'bg-orange-500 text-white border-orange-400' :
-              isMutual ? 'bg-emerald-500 text-white border-emerald-400' : 
-              isDark ? 'bg-slate-800 border-slate-700 text-indigo-400' : 'bg-indigo-50 border-indigo-100 text-indigo-600'
-            }`}>
+        <div className="flex items-start justify-between mb-4 gap-2">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-lg border-2 shrink-0 ${isMutual ? 'bg-emerald-500 text-white' : isDark ? 'bg-slate-800 text-indigo-400' : 'bg-indigo-50 text-indigo-600'}`}>
               {card.display_name?.charAt(0) || '?'}
             </div>
-            <div className="min-w-0 flex-1">
-              <h3 className={`font-black text-sm sm:text-base leading-tight truncate ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                {card.display_name}
-              </h3>
+            <div className="min-w-0">
+              <h3 className={`font-black text-sm sm:text-base leading-tight truncate ${isDark ? 'text-white' : 'text-slate-900'}`}>{card.display_name}</h3>
               <div className="flex flex-wrap gap-1 mt-1">
-                {isPinned && <span className="bg-indigo-600 text-white text-[7px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-tighter">PRIORITY</span>}
-                {isMutual && <span className="bg-emerald-500 text-white text-[7px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-tighter">MUTUAL</span>}
+                {card.is_pinned && <span className="bg-indigo-600 text-white text-[7px] font-black px-1.5 py-0.5 rounded-full uppercase">PRIORITY</span>}
+                {isMutual && <span className="bg-emerald-500 text-white text-[7px] font-black px-1.5 py-0.5 rounded-full uppercase">MUTUAL</span>}
               </div>
             </div>
           </div>
-          {canPin && (
-            <button 
-              onClick={handlePinToggle} 
-              disabled={isPinning}
-              className={`p-2 rounded-xl transition-all ${isPinned ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-400 hover:text-indigo-400'}`}
-            >
-              <svg className="w-5 h-5" fill={isPinned ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.414a4 4 0 00-5.656-5.656l-6.415 6.414a6 6 0 108.486 8.486L20.5 13" /></svg>
-            </button>
-          )}
-        </div>
-
-        <div className={`flex items-center justify-center p-3 rounded-2xl border transition-all mb-4 sm:mb-5 ${isDark ? 'bg-slate-950/50 border-slate-800' : 'bg-slate-50/50 border-slate-100'}`}>
-          <div className="grid grid-cols-2 gap-2 w-full">
-            <div className="text-center border-r border-slate-200 dark:border-slate-800">
-              <p className="text-sm font-black text-indigo-500">{stats.followers}</p>
-              <p className="text-[7px] font-black uppercase tracking-widest text-slate-500">Followers</p>
-            </div>
-            <div className="text-center">
-              <p className="text-sm font-black text-indigo-500">{stats.following}</p>
-              <p className="text-[7px] font-black uppercase tracking-widest text-slate-500">Following</p>
-            </div>
+          <div className="flex gap-1">
+            {canPin && (
+              <button onClick={handlePinToggle} disabled={isPinning} className={`p-2 rounded-xl ${card.is_pinned ? 'text-indigo-500' : 'text-slate-400'}`}>
+                <svg className="w-5 h-5" fill={card.is_pinned ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.414a4 4 0 00-5.656-5.656l-6.415 6.414a6 6 0 108.486 8.486L20.5 13" /></svg>
+              </button>
+            )}
+            {canManage && (
+               <button onClick={(e) => { e.stopPropagation(); onEdit(); }} className="p-2 text-slate-400 hover:text-indigo-500">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" /></svg>
+               </button>
+            )}
           </div>
         </div>
 
-        <div className="mb-4 sm:mb-5 flex items-center justify-between px-1">
-           <span className="text-[7px] font-black uppercase tracking-widest text-slate-400">Stability</span>
-           <span className={`text-[7px] font-black uppercase tracking-widest ${stabilityStatus.includes('EXPIRING') ? 'text-orange-500' : stabilityStatus.includes('PERMANENT') ? 'text-indigo-500' : 'text-emerald-500'}`}>
-             {stabilityStatus}
-           </span>
+        <div className="grid grid-cols-2 gap-2 mb-4 p-3 rounded-xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
+            <div className="text-center border-r border-slate-200 dark:border-slate-800">
+              <p className="text-sm font-black text-indigo-500">{stats.followers}</p>
+              <p className="text-[7px] font-black uppercase text-slate-500">Inbound</p>
+            </div>
+            <div className="text-center">
+              <p className="text-sm font-black text-indigo-500">{stats.following}</p>
+              <p className="text-[7px] font-black uppercase text-slate-500">Outbound</p>
+            </div>
         </div>
 
         <div className="mt-auto space-y-3">
           <div className="grid grid-cols-2 gap-2">
-            <a href={absoluteLink1} target="_blank" rel="noopener noreferrer" onClick={(e) => { e.stopPropagation(); setVisited1(true); }}
-              className={`flex items-center justify-center gap-1.5 py-4 px-1.5 text-[10px] font-black rounded-xl transition-all border-2 ${
-                visited1 ? (isDark ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-emerald-50 border-emerald-200 text-emerald-700')
-                : (isDark ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-600')
-              }`}
-            >
-              <span className="truncate">{card.link1_label || 'POST 1'}</span>
+            <a href={card.external_link} target="_blank" rel="noopener noreferrer" onClick={() => setVisited1(true)} className={`flex items-center justify-center py-4 px-2 text-[9px] font-black rounded-xl border-2 transition-all ${visited1 ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500' : 'bg-slate-100 dark:bg-slate-800 border-transparent text-slate-600 dark:text-slate-400'}`}>
+              {card.link1_label || 'POST 1'}
             </a>
-            {hasLink2 ? (
-              <a href={absoluteLink2} target="_blank" rel="noopener noreferrer" onClick={(e) => { e.stopPropagation(); setVisited2(true); }}
-                className={`flex items-center justify-center gap-1.5 py-4 px-1.5 text-[10px] font-black rounded-xl transition-all border-2 ${
-                  visited2 ? (isDark ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-emerald-50 border-emerald-200 text-emerald-700')
-                : (isDark ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-600')
-              }`}
-            >
-              <span className="truncate">{card.link2_label || 'POST 2'}</span>
-            </a>
-          ) : (
-            <div className={`flex items-center justify-center py-4 px-1.5 text-[8px] font-black rounded-xl border border-dashed ${isDark ? 'border-slate-800 text-slate-600' : 'border-slate-100 text-slate-300'}`}>
-              SINGLE
-            </div>
-          )}
+            {hasLink2 && (
+              <a href={card.external_link2} target="_blank" rel="noopener noreferrer" onClick={() => setVisited2(true)} className={`flex items-center justify-center py-4 px-2 text-[9px] font-black rounded-xl border-2 transition-all ${visited2 ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500' : 'bg-slate-100 dark:bg-slate-800 border-transparent text-slate-600 dark:text-slate-400'}`}>
+                {card.link2_label || 'POST 2'}
+              </a>
+            )}
           </div>
 
           {!isOwnCard ? (
-            <button onClick={handleEngageToggle}
-              className={`w-full flex items-center justify-center gap-2 py-4 px-3 rounded-xl text-[10px] font-black transition-all shadow-lg border-2 ${
-                isFollowed ? 'bg-emerald-500 border-emerald-400 text-white' 
-                : !allLinksVisited ? 'bg-slate-200 border-slate-100 opacity-60 text-slate-400 cursor-not-allowed'
-                : 'bg-indigo-600 border-indigo-500 text-white active:scale-95'
-              }`}
-            >
-              {isFollowed ? 'NODE ENGAGED' : 'ENGAGE NODE'}
+            <button onClick={handleEngageToggle} className={`w-full py-4 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${isFollowed ? 'bg-emerald-500 text-white' : !allLinksVisited ? 'bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed opacity-50' : 'bg-indigo-600 text-white shadow-lg active:scale-95'}`}>
+              {isFollowed ? 'ENGAGED' : 'ENGAGE NODE'}
             </button>
           ) : (
-            <div className={`w-full text-center py-4 px-3 text-[9px] font-black rounded-xl uppercase tracking-[0.15em] border border-dashed ${isPinned ? 'bg-indigo-500/10 border-indigo-500/30 text-indigo-500' : 'bg-slate-100 dark:bg-slate-500/5 border-slate-200 dark:border-slate-500/20 text-slate-400'}`}>
-              Your Node
-            </div>
+            <div className="w-full py-3 text-center text-[8px] font-black uppercase tracking-widest text-slate-400 border border-dashed rounded-xl">Your Identity</div>
           )}
         </div>
       </div>
