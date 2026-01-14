@@ -32,7 +32,19 @@ const Layout: React.FC<LayoutProps & { onOpenCreateProfile: () => void }> = ({ c
   const currentFolderName = currentFolder?.name || 'Hub';
   const isDark = theme === 'dark';
 
-  const userHasProfile = cards.some(c => c.user_id === currentUser?.id && c.folder_id === selectedFolderId);
+  const todayStr = useMemo(() => {
+    const tz = activeParty?.timezone || 'UTC';
+    return new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  }, [activeParty]);
+
+  // NEW LOGIC: Only disable if a card exists for the specific active tab and current date
+  const userHasProfile = cards.some(c => 
+    c.user_id === currentUser?.id && 
+    c.folder_id === selectedFolderId &&
+    c.session_type === activeSessionTab && 
+    c.session_date === todayStr
+  );
+
   const isSystemFolder = currentFolder?.party_id === SYSTEM_PARTY_ID;
   const isCreationDisabled = (userHasProfile && !isDev && !isAdmin) || (isSystemFolder && !isDev);
 
