@@ -1,7 +1,7 @@
 
-import React, { useState, useEffect, useCallback, createContext, useContext, useRef } from 'react';
-import { User, UserRole, Folder, Card, Follow, AppNotification, NotificationType, Party, InstructionBox } from './types';
-import { getSession, saveSession, findParty, getPartyData, markRead, deleteCard as dbDeleteCard, upsertCard, upsertFollow, addNotification, SYSTEM_PARTY_ID, isCardExpired, expelAndBanUser, updatePushToken } from './db';
+import React, { useState, useEffect, useCallback, createContext, useContext, useRef, useMemo } from 'react';
+import { User, UserRole, Folder, Card, Follow, AppNotification, NotificationType, Party, InstructionBox, SessionType } from './types';
+import { getSession, saveSession, findParty, getPartyData, markRead, deleteCard as dbDeleteCard, upsertCard, upsertFollow, addNotification, SYSTEM_PARTY_ID, isCardExpired, expelAndBanUser, updatePushToken, isTimestampExpired, getHubCycleInfo } from './db';
 import { supabase } from './supabase';
 import { initMessaging, getToken, onForegroundMessage } from './firebase'; 
 import Layout from './components/Layout';
@@ -17,6 +17,7 @@ interface AppContextType {
   currentUser: User | null;
   setCurrentUser: (user: User | null) => void;
   activeParty: Party | null;
+  setActiveParty: (party: Party | null) => void;
   isAdmin: boolean;
   isDev: boolean;
   logout: () => void;
@@ -44,6 +45,8 @@ interface AppContextType {
   setIsWorkflowMode: (val: boolean) => void;
   socketStatus: 'connected' | 'disconnected' | 'connecting';
   syncData: () => Promise<void>;
+  activeSessionTab: SessionType;
+  setActiveSessionTab: (session: SessionType) => void;
 }
 
 export const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -74,8 +77,9 @@ const App: React.FC = () => {
   const [toast, setToast] = useState<{message: string, type: 'success' | 'error'} | null>(null);
   const [socketStatus, setSocketStatus] = useState<'connected' | 'disconnected' | 'connecting'>('connecting');
   const [invitedHubId, setInvitedHubId] = useState<string | null>(null);
+  const [activeSessionTab, setActiveSessionTab] = useState<SessionType>('morning');
 
-  const lastAudit = useRef<number>(0);
+  const lastAuditDate = useRef<string>(''); 
   const cardsRef = useRef(cards);
   const followsRef = useRef(follows);
   const activePartyRef = useRef(activeParty);
@@ -84,19 +88,16 @@ const App: React.FC = () => {
   useEffect(() => { followsRef.current = follows; }, [follows]);
   useEffect(() => { activePartyRef.current = activeParty; }, [activeParty]);
 
-  // Check for invited hub in URL
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const hub = params.get('hub');
     if (hub) {
       setInvitedHubId(hub);
-      // Remove param from URL without refreshing
       const newUrl = window.location.pathname + window.location.hash;
       window.history.replaceState({}, '', newUrl);
     }
   }, []);
 
-  // Persist current view to survive refreshes
   useEffect(() => {
     if (selectedFolderId) {
       localStorage.setItem(VIEW_STORAGE_KEY, selectedFolderId);
@@ -117,10 +118,11 @@ const App: React.FC = () => {
       const party = await findParty(pid);
       setActiveParty(party);
       const data = await getPartyData(pid);
+      
       setFolders(data.folders);
       setCards(data.cards.filter(c => !isCardExpired(c, party)));
-      setFollows(data.follows);
-      setNotifications(data.notifications);
+      setFollows(data.follows.filter(f => !isTimestampExpired(f.timestamp, party)));
+      setNotifications(data.notifications.filter(n => !isTimestampExpired(n.timestamp, party)));
       setInstructions(data.instructions);
     } catch (err: any) {
       console.error("Sync Error", err);
@@ -129,32 +131,64 @@ const App: React.FC = () => {
 
   const runAccountabilityAudit = useCallback(async () => {
     if (currentUser?.role !== UserRole.ADMIN || !activePartyRef.current) return;
-    if (Date.now() - lastAudit.current < 60000) return; 
-    lastAudit.current = Date.now();
 
-    const { data: users } = await supabase.from('users').select('*').eq('party_id', activePartyRef.current.id);
-    if (!users) return;
+    const tz = activePartyRef.current.timezone || 'UTC';
+    const todayDate = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+    
+    // 1. Only run once per calendar day
+    if (lastAuditDate.current === todayDate) return;
 
-    for (const member of users) {
-      if (member.role !== UserRole.REGULAR) continue;
+    // 2. Calculate if we are in the "Hour before Reset" window
+    const info = getHubCycleInfo(activePartyRef.current);
+    
+    // We trigger the audit when the Hub Reset is less than 60 minutes away
+    if (info.resetIn <= 60 && info.resetIn > 0) {
+      console.log("JANITOR: Executing Daily Verdict...");
       
-      const inbound = followsRef.current.filter(f => cardsRef.current.find(c => c.id === f.target_card_id)?.user_id === member.id).length;
-      const outbound = followsRef.current.filter(f => f.follower_id === member.id).length;
+      const { data: users } = await supabase.from('users').select('*').eq('party_id', activePartyRef.current.id);
+      if (!users) return;
 
-      if (inbound - outbound > 3) {
-        const warnings = (member.engagement_warnings || 0) + 1;
-        if (warnings >= 4) {
-          await expelAndBanUser(member as User);
-          showToast(`JANITOR: Expelled ${member.name} for persistent leaching.`, "error");
+      for (const member of users) {
+        if (member.role !== UserRole.REGULAR) continue;
+        
+        // Calculate Gap (Ignoring Pinned Cards)
+        const inbound = followsRef.current.filter(f => {
+          const card = cardsRef.current.find(c => c.id === f.target_card_id);
+          return card?.user_id === member.id && !card?.is_pinned;
+        }).length;
+
+        const outbound = followsRef.current.filter(f => f.follower_id === member.id).length;
+
+        if (inbound - outbound > 3) {
+          const strikes = (member.engagement_warnings || 0) + 1;
+          const labels = ['CLEAN', '1st Warning', '2nd Warning', 'Final Warning'];
+          
+          if (strikes >= 4) {
+            await expelAndBanUser(member as User);
+            showToast(`JANITOR: Node ${member.name} TERMINATED (4/4 strikes).`, "error");
+          } else {
+            const newLabel = labels[Math.min(strikes, 3)];
+            await supabase.from('users').update({ 
+              engagement_warnings: strikes, 
+              warning_label: newLabel 
+            }).eq('id', member.id);
+            
+            await addNotification({
+              recipient_id: member.id, sender_id: 'SYSTEM', sender_name: 'System Audit',
+              type: NotificationType.SYSTEM_WARNING, party_id: activePartyRef.current.id, related_card_id: ''
+            });
+            showToast(`JANITOR: ${member.name} issued ${newLabel}. Support gap detected.`);
+          }
         } else {
-          await supabase.from('users').update({ engagement_warnings: warnings }).eq('id', member.id);
-          await addNotification({
-            recipient_id: member.id, sender_id: 'SYSTEM', sender_name: 'System Audit',
-            type: NotificationType.SYSTEM_WARNING, party_id: activePartyRef.current.id, related_card_id: ''
-          });
-          showToast(`JANITOR: Issued strike ${warnings}/4 to ${member.name}. Support gap detected.`);
+          // If they fixed their score before the audit, reset them to CLEAN
+          if (member.warning_label !== 'CLEAN') {
+            await supabase.from('users').update({ warning_label: 'CLEAN', engagement_warnings: 0 }).eq('id', member.id);
+          }
         }
       }
+
+      lastAuditDate.current = todayDate; // Mark as completed for today
+      showToast("Daily Audit Complete: Hub is compliant.");
     }
   }, [currentUser?.role, showToast]);
 
@@ -168,6 +202,7 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!currentUser) return;
     syncData();
+    // Janitor checks every 60s, but only executes once a day in the Reset Window
     const interval = setInterval(() => {
       runAccountabilityAudit();
     }, 60000);
@@ -177,41 +212,26 @@ const App: React.FC = () => {
   useEffect(() => {
     const registerForPush = async () => {
       if (!currentUser) return;
-      
       try {
         if (!('serviceWorker' in navigator) || !('Notification' in window)) return;
-
         const messaging = await initMessaging();
         if (!messaging) return;
-
         const vapidKey = (window as any).process.env.FIREBASE_VAPID_KEY;
         if (!vapidKey) return;
-
         let registration = await navigator.serviceWorker.getRegistration('/sw.js');
-        if (!registration) {
-          registration = await navigator.serviceWorker.register('/sw.js');
-        }
-
+        if (!registration) registration = await navigator.serviceWorker.register('/sw.js');
         await navigator.serviceWorker.ready;
-
         if (Notification.permission === 'default') {
           const permission = await Notification.requestPermission();
           if (permission !== 'granted') return;
         }
-
-        const token = await getToken(messaging, { 
-          serviceWorkerRegistration: registration,
-          vapidKey 
-        });
-
+        const token = await getToken(messaging, { serviceWorkerRegistration: registration, vapidKey });
         if (token && token !== currentUser.push_token) {
           await updatePushToken(currentUser.id, token);
           setCurrentUser(prev => prev ? { ...prev, push_token: token } : null);
           showToast("Push Notifications Active");
         }
-      } catch (err) {
-        console.warn("FCM: Setup incomplete. Likely insecure context or blocked IndexedDB.");
-      }
+      } catch (err) { console.warn("FCM: Setup incomplete."); }
     };
     registerForPush();
   }, [currentUser?.id, showToast]);
@@ -220,7 +240,6 @@ const App: React.FC = () => {
     if (!currentUser || !currentUser.party_id) return;
     const pid = currentUser.party_id;
     const channel = supabase.channel(`party-realtime-${pid}`);
-    
     channel
       .on('postgres_changes', { event: '*', schema: 'public', table: 'cards', filter: `party_id=eq.${pid}` }, () => syncData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'users', filter: `party_id=eq.${pid}` }, () => syncData())
@@ -234,7 +253,6 @@ const App: React.FC = () => {
       .subscribe((status) => {
         setSocketStatus(status === 'SUBSCRIBED' ? 'connected' : 'disconnected');
       });
-
     return () => { supabase.removeChannel(channel); };
   }, [currentUser?.party_id, syncData]);
 
@@ -267,9 +285,7 @@ const App: React.FC = () => {
         });
         showToast("Engagement Verified");
       }
-    } catch (err) {
-      showToast("Sync Error", "error");
-    }
+    } catch (err) { showToast("Sync Error", "error"); }
   };
 
   const deleteCard = async (id: string) => {
@@ -287,6 +303,39 @@ const App: React.FC = () => {
     setEditingCard(null);
   };
 
+  // --- Fix: Implementing missing handleCreateProfile ---
+  const handleCreateProfile = async (name: string, link1: string, link2: string) => {
+    if (!currentUser || !selectedFolderId) return;
+
+    const tz = activeParty?.timezone || 'UTC';
+    const dateStr = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+
+    const newCard: Card = {
+      id: Math.random().toString(36).substr(2, 9),
+      user_id: currentUser.id,
+      creator_role: currentUser.role,
+      folder_id: selectedFolderId,
+      party_id: currentUser.party_id,
+      display_name: name,
+      external_link: link1,
+      external_link2: link2,
+      timestamp: Date.now(),
+      session_type: activeSessionTab,
+      session_date: dateStr,
+      is_pinned: false,
+      is_permanent: false
+    };
+
+    try {
+      await upsertCard(newCard);
+      showToast("Identity Synchronized with Matrix");
+      setIsCreateModalOpen(false);
+      await syncData();
+    } catch (err) {
+      showToast("Initialization Failed", "error");
+    }
+  };
+
   const markNotificationRead = async (id: string) => {
     await markRead(id);
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
@@ -299,13 +348,18 @@ const App: React.FC = () => {
     setActiveParty(null); 
   };
 
+  const todayStr = useMemo(() => {
+    const tz = activeParty?.timezone || 'UTC';
+    return new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  }, [activeParty]);
+
   const contextValue: AppContextType = {
-    currentUser, setCurrentUser, activeParty, isAdmin: currentUser?.role === UserRole.ADMIN,
+    currentUser, setCurrentUser, activeParty, setActiveParty, isAdmin: currentUser?.role === UserRole.ADMIN,
     isDev: currentUser?.role === UserRole.DEV, logout, folders, setFolders, cards, setCards,
     follows, toggleFollow, notifications, instructions, markNotificationRead,
     selectedFolderId, setSelectedFolderId, deleteCard, updateCard, searchQuery, setSearchQuery,
     theme, setTheme, isPoweredUp, setIsPoweredUp, showToast, isWorkflowMode, setIsWorkflowMode,
-    socketStatus, syncData
+    socketStatus, syncData, activeSessionTab, setActiveSessionTab
   };
 
   const renderMainContent = () => {
@@ -331,24 +385,7 @@ const App: React.FC = () => {
           </Layout>
           {isCreateModalOpen && <CreateProfileModal 
             onClose={() => setIsCreateModalOpen(false)} 
-            onSubmit={async (n, l1, l2) => {
-              const newCard: Card = {
-                id: Math.random().toString(36).substr(2, 9),
-                user_id: currentUser.id,
-                creator_role: currentUser.role,
-                folder_id: selectedFolderId!,
-                party_id: currentUser.party_id,
-                display_name: n,
-                external_link: l1,
-                external_link2: l2,
-                timestamp: Date.now(),
-                x: 0,
-                y: 0
-              };
-              await upsertCard(newCard);
-              showToast("Profile Established in Hub");
-              setIsCreateModalOpen(false);
-            }} 
+            onSubmit={handleCreateProfile} 
           />}
           {editingCard && <EditProfileModal 
             card={editingCard} 

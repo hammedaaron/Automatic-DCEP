@@ -1,5 +1,5 @@
 
-import { User, Folder, Card, Follow, AppNotification, UserRole, NotificationType, Party, InstructionBox, RewardLevel } from './types';
+import { User, Folder, Card, Follow, AppNotification, UserRole, NotificationType, Party, InstructionBox, RewardLevel, PodSession } from './types';
 import { supabase } from './supabase';
 
 const SESSION_KEY = 'connector_pro_v3_session';
@@ -48,10 +48,10 @@ export const isUserBanned = async (partyId: string, username: string): Promise<b
   }
 };
 
-// --- SESSION LOGIC ---
+// --- SESSION & WINDOW LOGIC ---
 
-export const isPodSessionActive = (party: Party | null): { active: boolean; sessionName?: string } => {
-  if (!party || !party.pod_sessions || party.pod_sessions.length === 0) return { active: true };
+export const getActiveWindow = (party: Party | null): { session: PodSession | null; windowId: string | null } => {
+  if (!party || !party.pod_sessions || party.pod_sessions.length === 0) return { session: null, windowId: null };
   
   const tz = party.timezone || 'UTC';
   const nowInTz = new Date(new Intl.DateTimeFormat('en-US', { timeZone: tz }).format(new Date()));
@@ -64,25 +64,35 @@ export const isPodSessionActive = (party: Party | null): { active: boolean; sess
     const endMin = endH * 60 + endM;
 
     if (currentMinutes >= startMin && currentMinutes <= endMin) {
-      return { active: true, sessionName: session.name };
+      const dateStr = nowInTz.toISOString().split('T')[0];
+      return { session, windowId: `${session.name}-${session.start}-${dateStr}` };
     }
   }
-  return { active: false };
+  return { session: null, windowId: null };
 };
 
-/**
- * Calculates real-time countdowns and status for Admin UI.
- */
+export const isPodSessionActive = (party: Party | null): { active: boolean; sessionName?: string } => {
+  const { session } = getActiveWindow(party);
+  return { active: !!session, sessionName: session?.name };
+};
+
 export const getHubCycleInfo = (party: Party | null) => {
-  if (!party || !party.pod_sessions || party.pod_sessions.length === 0) {
-    return { status: 'ALWAYS_OPEN', timeRemaining: null, nextReset: 'Rolling 24h' };
-  }
+  if (!party) return { status: 'ALWAYS_OPEN', timeRemaining: null, nextReset: 'Rolling 24h' };
 
   const tz = party.timezone || 'UTC';
   const nowInTz = new Date(new Intl.DateTimeFormat('en-US', { timeZone: tz }).format(new Date()));
   const currentMinutes = nowInTz.getHours() * 60 + nowInTz.getMinutes();
 
-  const sortedSessions = [...party.pod_sessions].sort((a, b) => a.start.localeCompare(b.start));
+  const allSessions: PodSession[] = [...(party.pod_sessions || [])];
+  if (party.session_config) {
+    if (party.session_config.morning?.enabled) allSessions.push({ name: 'Morning', ...party.session_config.morning });
+    if (party.session_config.afternoon?.enabled) allSessions.push({ name: 'Afternoon', ...party.session_config.afternoon });
+    if (party.session_config.evening?.enabled) allSessions.push({ name: 'Evening', ...party.session_config.evening });
+  }
+
+  if (allSessions.length === 0) return { status: 'ALWAYS_OPEN', timeRemaining: null, nextReset: 'Rolling 24h' };
+
+  const sortedSessions = allSessions.sort((a, b) => a.start.localeCompare(b.start));
   const firstPodStart = sortedSessions[0].start;
   const [h, m] = firstPodStart.split(':').map(Number);
   let resetMinutes = (h * 60 + m) - 60; 
@@ -106,7 +116,6 @@ export const getHubCycleInfo = (party: Party | null) => {
     }
   }
 
-  // If no next session today, the next one is the first session tomorrow
   if (!activeSession && !nextSession) {
     const [sH, sM] = sortedSessions[0].start.split(':').map(Number);
     nextSession = { ...sortedSessions[0], countdown: (1440 - currentMinutes) + (sH * 60 + sM) };
@@ -121,6 +130,16 @@ export const getHubCycleInfo = (party: Party | null) => {
     nextSession,
     resetIn: minsToReset,
     resetTimeFormatted: `${Math.floor(resetMinutes / 60).toString().padStart(2, '0')}:${(resetMinutes % 60).toString().padStart(2, '0')}`
+  };
+};
+
+export const getJanitorAuditWindow = (party: Party | null) => {
+  if (!party) return { isAuditTime: false };
+  const info = getHubCycleInfo(party);
+  // We return true if we are in the 60-minute window BEFORE the Hub Reset
+  return {
+    isAuditTime: info.resetIn <= 60 && info.resetIn > 0,
+    resetIn: info.resetIn
   };
 };
 
@@ -166,25 +185,30 @@ export const getCalendarDaysBetween = (start: number, end: number, tz: string = 
   return Math.round(diffMs / (1000 * 60 * 60 * 24));
 };
 
-export const isCardExpired = (card: Card, party: Party | null) => {
-  if (card.is_permanent) return false;
-  
-  if (!party || !party.pod_sessions || party.pod_sessions.length === 0) {
-    return (Date.now() - card.timestamp) > (24 * 60 * 60 * 1000);
-  }
+export const isTimestampExpired = (timestamp: number, party: Party | null): boolean => {
+  if (!party) return (Date.now() - timestamp) > (24 * 60 * 60 * 1000);
 
   const tz = party.timezone || 'UTC';
-  const sortedSessions = [...party.pod_sessions].sort((a, b) => a.start.localeCompare(b.start));
+  const allSessions: PodSession[] = [...(party.pod_sessions || [])];
+  if (party.session_config) {
+    if (party.session_config.morning?.enabled) allSessions.push({ name: 'Morning', ...party.session_config.morning });
+    if (party.session_config.afternoon?.enabled) allSessions.push({ name: 'Afternoon', ...party.session_config.afternoon });
+    if (party.session_config.evening?.enabled) allSessions.push({ name: 'Evening', ...party.session_config.evening });
+  }
+
+  if (allSessions.length === 0) return (Date.now() - timestamp) > (24 * 60 * 60 * 1000);
+
+  const sortedSessions = allSessions.sort((a, b) => a.start.localeCompare(b.start));
   const firstPodStart = sortedSessions[0].start;
   const [h, m] = firstPodStart.split(':').map(Number);
   let resetMinutes = (h * 60 + m) - 60; 
   if (resetMinutes < 0) resetMinutes += 1440;
 
   const nowInTz = new Date(new Intl.DateTimeFormat('en-US', { timeZone: tz }).format(new Date()));
-  const cardInTz = new Date(new Intl.DateTimeFormat('en-US', { timeZone: tz }).format(new Date(card.timestamp)));
+  const itemInTz = new Date(new Intl.DateTimeFormat('en-US', { timeZone: tz }).format(new Date(timestamp)));
 
   const nowTotalMins = nowInTz.getHours() * 60 + nowInTz.getMinutes();
-  const cardTotalMins = cardInTz.getHours() * 60 + cardInTz.getMinutes();
+  const itemTotalMins = itemInTz.getHours() * 60 + itemInTz.getMinutes();
 
   const getCycleId = (date: Date, totalMins: number, resetMins: number) => {
     const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
@@ -193,9 +217,15 @@ export const isCardExpired = (card: Card, party: Party | null) => {
   };
 
   const currentCycle = getCycleId(nowInTz, nowTotalMins, resetMinutes);
-  const cardCycle = getCycleId(cardInTz, cardTotalMins, resetMinutes);
+  const itemCycle = getCycleId(itemInTz, itemTotalMins, resetMinutes);
 
-  return cardCycle < currentCycle;
+  return itemCycle < currentCycle;
+};
+
+export const isCardExpired = (card: Card, party: Party | null) => {
+  if (card.is_permanent) return false;
+  if (card.is_pinned) return false;
+  return isTimestampExpired(card.timestamp, party);
 };
 
 // --- DATABASE OPERATIONS ---
@@ -263,6 +293,10 @@ export const deleteUser = async (id: string) => {
 
 export const updatePartySessions = async (partyId: string, sessions: any[]) => {
   await supabase.from('parties').update({ pod_sessions: sessions }).eq('id', partyId);
+};
+
+export const updatePartySessionConfig = async (partyId: string, config: any) => {
+  await supabase.from('parties').update({ session_config: config }).eq('id', partyId);
 };
 
 export const purgePartyCards = async (partyId: string) => {
@@ -381,10 +415,10 @@ export const registerParty = async (partyName: string, adminPassword: string, ti
   if (!info) throw new Error("Invalid password format. Must be HamstarXXY.");
   
   const existing = await findPartyByName(partyName);
-  if (existing) throw new Error(`Community name '${partyName}' already exists in Matrix.`);
+  if (existing) throw new Error(`Hub name '${partyName}' is already established.`);
   
   const existingById = await findParty(info.partyId);
-  if (existingById) throw new Error(`ID ${info.partyId} is already assigned to Hub: ${existingById.name}`);
+  if (existingById) throw new Error(`Hub Slot ${info.partyId} is already occupied by: ${existingById.name}`);
 
   const newParty: Party = { id: info.partyId, name: partyName.trim(), timezone, max_slots: 50, pod_sessions: [], is_parking_enabled: false };
   const fingerprint = await getFingerprint();
@@ -398,12 +432,11 @@ export const registerParty = async (partyName: string, adminPassword: string, ti
   };
 
   const { error: partyError } = await supabase.from('parties').insert([newParty]);
-  if (partyError) throw new Error(`Supabase Error establishing Hub: ${partyError.message}`);
+  if (partyError) throw new Error(`Hub Genesis interrupted: ${partyError.message}`);
 
-  const { error: userError } = await supabase.from('users').insert([newAdmin]);
+  const { error: userError } = await supabase.from('users').upsert([newAdmin]);
   if (userError) {
-    await supabase.from('parties').delete().eq('id', info.partyId);
-    throw new Error(`Supabase Error registering Admin: ${userError.message}`);
+    throw new Error(`Admin Authorization failed: ${userError.message}`);
   }
 
   return { party: newParty, admin: newAdmin };
@@ -418,8 +451,8 @@ export const loginUser = async (username: string, password: string, partyId: str
 };
 
 export const registerUser = async (user: User) => {
-  const { error } = await supabase.from('users').insert([user]);
-  if (error) throw new Error(`Supabase User Registration failed: ${error.message}`);
+  const { error } = await supabase.from('users').upsert([user]);
+  if (error) throw new Error(`Identity sync failed: ${error.message}`);
   return user;
 };
 

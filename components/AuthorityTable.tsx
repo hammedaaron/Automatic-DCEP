@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { getAuthorityData, deleteParty, deleteUser, resetAllData, SYSTEM_PARTY_ID, getRewardTier, expelAndBanUser, updatePartyParkingStatus, getHubCycleInfo } from '../db';
 import { Party, User, Folder, Card, Follow, UserRole } from '../types';
@@ -229,91 +228,101 @@ const AuthorityTable: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/40">
-              {auditData.map((member: any) => (
-                <tr key={member.id} className="hover:bg-white/[0.03] group transition-colors">
-                  <td className="p-6 sm:p-8">
-                    <div className="flex flex-col gap-3 relative">
-                      <div className="flex items-center gap-4">
-                        <div className="text-2xl sm:text-3xl shrink-0 drop-shadow-[0_0_10px_rgba(255,255,255,0.1)]">{member.tier.icon}</div>
-                        <div className="min-w-0">
-                          <div className="font-black text-white text-sm sm:text-base truncate group-hover:text-indigo-400 transition-colors">{member.name}</div>
-                          <div className={`text-[8px] font-black uppercase tracking-widest mt-1 truncate ${member.tier.color}`}>
-                            {member.tier.level} Protocol Active
+              {auditData.map((member: any) => {
+                const hasWarningBadge = member.warning_label && member.warning_label !== 'CLEAN';
+                return (
+                  <tr key={member.id} className="hover:bg-white/[0.03] group transition-colors">
+                    <td className="p-6 sm:p-8">
+                      <div className="flex flex-col gap-3 relative">
+                        <div className="flex items-center gap-4">
+                          <div className="text-2xl sm:text-3xl shrink-0 drop-shadow-[0_0_10px_rgba(255,255,255,0.1)]">{member.tier.icon}</div>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <div className="font-black text-white text-sm sm:text-base truncate group-hover:text-indigo-400 transition-colors">{member.name}</div>
+                              {hasWarningBadge && (
+                                <span className="bg-red-600 text-white text-[8px] font-black px-2 py-0.5 rounded-full animate-pulse whitespace-nowrap">
+                                  {member.warning_label}
+                                </span>
+                              )}
+                            </div>
+                            <div className={`text-[8px] font-black uppercase tracking-widest mt-1 truncate ${member.tier.color}`}>
+                              {member.tier.level} Protocol Active
+                            </div>
                           </div>
                         </div>
-                      </div>
-                      
-                      {activeParty?.is_parking_enabled && (
-                        <div className="relative" ref={rowParkingRef}>
-                          <button 
-                            onClick={() => setShowRowParkingId(showRowParkingId === member.id ? null : member.id)}
-                            className="bg-indigo-600/10 text-indigo-400 border border-indigo-600/20 px-3 py-1.5 rounded-xl text-[8px] font-black uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all w-fit"
-                          >
-                            Verify Slot
-                          </button>
-                          
-                          {showRowParkingId === member.id && (
-                            <div className="absolute top-10 left-0 z-[100] w-64 glass-card p-5 rounded-2xl border border-white/10 shadow-2xl animate-in zoom-in-95 duration-200">
-                              <p className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.2em] mb-3 truncate border-b border-white/5 pb-2">Node Verification</p>
-                              <div className="space-y-2.5">
-                                <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-[9px] font-black text-emerald-400 uppercase flex items-center justify-between">
-                                  <span>SLOT STATUS</span>
-                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                                </div>
-                                <div className="p-3 rounded-xl bg-white/5 border border-white/5 text-[9px] font-bold text-slate-400 uppercase">
-                                  Community: {member.party_id === SYSTEM_PARTY_ID ? 'GLOBAL ARCHIVE' : 'POD SPECIFIC'}
+                        
+                        {activeParty?.is_parking_enabled && (
+                          <div className="relative" ref={rowParkingRef}>
+                            <button 
+                              onClick={() => setShowRowParkingId(showRowParkingId === member.id ? null : member.id)}
+                              className="bg-indigo-600/10 text-indigo-400 border border-indigo-600/20 px-3 py-1.5 rounded-xl text-[8px] font-black uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all w-fit"
+                            >
+                              Verify Slot
+                            </button>
+                            
+                            {showRowParkingId === member.id && (
+                              <div className="absolute top-10 left-0 z-[100] w-64 glass-card p-5 rounded-2xl border border-white/10 shadow-2xl animate-in zoom-in-95 duration-200">
+                                <p className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.2em] mb-3 truncate border-b border-white/5 pb-2">Node Verification</p>
+                                <div className="space-y-2.5">
+                                  <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-[9px] font-black text-emerald-400 uppercase flex items-center justify-between">
+                                    <span>SLOT STATUS</span>
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                                  </div>
+                                  <div className="p-3 rounded-xl bg-white/5 border border-white/5 text-[9px] font-bold text-slate-400 uppercase">
+                                    Community: {member.party_id === SYSTEM_PARTY_ID ? 'GLOBAL ARCHIVE' : 'POD SPECIFIC'}
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </td>
-                  <td className="p-6 sm:p-8">
-                    <div className="flex items-center gap-2">
-                      <span className="font-black text-indigo-400 text-base">{member.outbound}</span>
-                      <svg className="w-4 h-4 text-indigo-500 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="4" d="M5 10l7-7m0 0l7 7m-7-7v18" /></svg>
-                    </div>
-                  </td>
-                  <td className="p-6 sm:p-8">
-                    <div className="flex items-center gap-2">
-                      <span className="font-black text-emerald-400 text-base">{member.inbound}</span>
-                      <svg className="w-4 h-4 text-emerald-500 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="4" d="M19 14l-7 7m0 0l-7-7m7 7V3" /></svg>
-                    </div>
-                  </td>
-                  <td className="p-6 sm:p-8">
-                    <span className={`px-3 py-1.5 rounded-xl font-black text-[10px] uppercase tracking-wider inline-flex items-center gap-2 ${
-                      member.gap > 3 ? 'bg-red-500/20 text-red-500 border border-red-500/30' : 'bg-slate-800/50 text-slate-500'
-                    }`}>
-                      <span className={`w-1 h-1 rounded-full ${member.gap > 3 ? 'bg-red-500' : 'bg-slate-600'}`}></span>
-                      {member.gap > 0 ? `+${member.gap} LEACH` : 'STABLE'}
-                    </span>
-                  </td>
-                  <td className="p-6 sm:p-8">
-                    <div className="flex gap-2">
-                      {[1, 2, 3, 4].map((dot) => (
-                        <div 
-                          key={dot} 
-                          className={`w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full transition-all duration-500 ${
-                            dot <= (member.engagement_warnings || 0) 
-                              ? 'bg-red-500 shadow-[0_0_12px_rgba(239,68,68,0.6)] animate-pulse' 
-                              : 'bg-slate-800'
-                          }`} 
-                        />
-                      ))}
-                    </div>
-                  </td>
-                  <td className="p-6 sm:p-8 text-right">
-                    <button 
-                      onClick={() => handleManualExpel(member)}
-                      className="opacity-100 sm:opacity-0 group-hover:opacity-100 bg-red-500/10 text-red-500 px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest border border-red-500/20 hover:bg-red-500 hover:text-white transition-all shadow-lg shadow-red-500/10"
-                    >
-                      Expel Node
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                    <td className="p-6 sm:p-8">
+                      <div className="flex items-center gap-2">
+                        <span className="font-black text-indigo-400 text-base">{member.outbound}</span>
+                        <svg className="w-4 h-4 text-indigo-500 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="4" d="M5 10l7-7m0 0l7 7m-7-7v18" /></svg>
+                      </div>
+                    </td>
+                    <td className="p-6 sm:p-8">
+                      <div className="flex items-center gap-2">
+                        <span className="font-black text-emerald-400 text-base">{member.inbound}</span>
+                        <svg className="w-4 h-4 text-emerald-500 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="4" d="M19 14l-7 7m0 0l-7-7m7 7V3" /></svg>
+                      </div>
+                    </td>
+                    <td className="p-6 sm:p-8">
+                      <span className={`px-3 py-1.5 rounded-xl font-black text-[10px] uppercase tracking-wider inline-flex items-center gap-2 ${
+                        member.gap > 3 ? 'bg-red-500/20 text-red-500 border border-red-500/30' : 'bg-slate-800/50 text-slate-500'
+                      }`}>
+                        <span className={`w-1 h-1 rounded-full ${member.gap > 3 ? 'bg-red-500' : 'bg-slate-600'}`}></span>
+                        {member.gap > 0 ? `+${member.gap} LEACH` : 'STABLE'}
+                      </span>
+                    </td>
+                    <td className="p-6 sm:p-8">
+                      <div className="flex gap-2">
+                        {[1, 2, 3, 4].map((dot) => (
+                          <div 
+                            key={dot} 
+                            className={`w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full transition-all duration-500 ${
+                              dot <= (member.engagement_warnings || 0) 
+                                ? 'bg-red-500 shadow-[0_0_12px_rgba(239,68,68,0.6)] animate-pulse' 
+                                : 'bg-slate-800'
+                            }`} 
+                          />
+                        ))}
+                      </div>
+                    </td>
+                    <td className="p-6 sm:p-8 text-right">
+                      <button 
+                        onClick={() => handleManualExpel(member)}
+                        className="opacity-100 sm:opacity-0 group-hover:opacity-100 bg-red-500/10 text-red-500 px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest border border-red-500/20 hover:bg-red-500 hover:text-white transition-all shadow-lg shadow-red-500/10"
+                      >
+                        Expel Node
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -332,7 +341,7 @@ const AuthorityTable: React.FC = () => {
             <p className="text-3xl sm:text-4xl lg:text-5xl font-black text-white truncate leading-none">{data?.parties.length || 0}</p>
          </div>
          <div className="p-6 sm:p-10 rounded-[2rem] sm:rounded-[3rem] bg-slate-900 border border-slate-800 shadow-2xl relative overflow-hidden group">
-            <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><svg className="w-16 h-16" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M13.477 14.89A6 6 0 015.11 6.524l8.367 8.368zm1.414-1.414L6.524 5.11a6 6 0 018.367 8.367zM18 10a8 8 0 11-16 0 8 8 0 0116 0z" clipRule="evenodd" /></svg></div>
+            <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><svg className="w-16 h-16" fill="currentColor" viewBox="0 0 20 20"><path d="M13.477 14.89A6 6 0 015.11 6.524l8.367 8.368zm1.414-1.414L6.524 5.11a6 6 0 018.367 8.367zM18 10a8 8 0 11-16 0 8 8 0 0116 0z" clipRule="evenodd" /></svg></div>
             <p className="text-[8px] sm:text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] mb-2 truncate">Blacklisted Nodes</p>
             <p className="text-3xl sm:text-4xl lg:text-5xl font-black text-red-500 truncate leading-none">{data?.banned.length || 0}</p>
          </div>

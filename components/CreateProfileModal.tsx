@@ -2,63 +2,93 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../App';
 import { UserRole } from '../types';
-import { optimizeIdentity } from '../services/gemini';
-import { getCalendarDaysBetween, isPodSessionActive } from '../db';
+import { SYSTEM_PARTY_ID } from '../db';
 
 interface CreateProfileModalProps {
   onClose: () => void;
-  onSubmit: (name: string, link1: string, link2: string, link1Label?: string, link2Label?: string, isPermanent?: boolean) => void;
+  onSubmit: (name: string, link1: string, link2: string) => void;
 }
 
 const CreateProfileModal: React.FC<CreateProfileModalProps> = ({ onClose, onSubmit }) => {
-  const { currentUser, theme, cards, selectedFolderId, activeParty, showToast } = useApp();
+  const { currentUser, theme, cards, selectedFolderId, activeParty, showToast, activeSessionTab, folders } = useApp();
   const [name, setName] = useState(currentUser?.name || '');
   const [link1, setLink1] = useState('');
-  const [link2, setLink2] = useState('');
-  const [isOptimizing, setIsOptimizing] = useState(false);
   const isDark = theme === 'dark';
 
   const isDev = currentUser?.role === UserRole.DEV;
-  const isAdmin = currentUser?.role === UserRole.ADMIN;
-  
-  const tz = activeParty?.timezone || 'UTC';
-  const sessionStatus = useMemo(() => isPodSessionActive(activeParty), [activeParty]);
+  const isAdmin = currentUser?.role === UserRole.ADMIN || isDev;
 
-  // Calculate the next reset time for the UI
-  const nextResetDisplay = useMemo(() => {
-    if (!activeParty?.pod_sessions?.length) return "24h";
-    const sorted = [...activeParty.pod_sessions].sort((a, b) => a.start.localeCompare(b.start));
-    const [h, m] = sorted[0].start.split(':').map(Number);
-    let rh = h - 1;
-    if (rh < 0) rh = 23;
-    return `${rh.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+  const todayStr = useMemo(() => {
+    const tz = activeParty?.timezone || 'UTC';
+    return new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
   }, [activeParty]);
 
-  const userTodayCardsInFolder = cards.filter(c => 
-    c.user_id === currentUser?.id && 
-    c.folder_id === selectedFolderId && 
-    getCalendarDaysBetween(c.timestamp, Date.now(), tz) === 0
-  );
-  
-  const reachedRateLimit = !isDev && (
-    (isAdmin && userTodayCardsInFolder.length >= 2) || 
-    (!isAdmin && userTodayCardsInFolder.length >= 1)
-  );
+  const sessionConfig = activeParty?.session_config?.[activeSessionTab];
+
+  const { isBlocked, blockReason } = useMemo(() => {
+    const currentFolder = folders.find(f => f.id === selectedFolderId);
+    
+    // --- THE WALL: BLOCK ADMINS FROM DEV FOLDERS ---
+    if (isAdmin && !isDev && currentFolder?.party_id === SYSTEM_PARTY_ID) {
+      return { isBlocked: true, blockReason: "Access Denied: Universal Folders are restricted to Architects." };
+    }
+
+    // --- ADMIN LIMITS: 5 PER COMMUNITY ---
+    if (isAdmin && !isDev) {
+      const folderCount = cards.filter(c => 
+        c.user_id === currentUser?.id && 
+        c.folder_id === selectedFolderId && 
+        c.session_date === todayStr
+      ).length;
+
+      if (folderCount >= 5) {
+        return { isBlocked: true, blockReason: "Community Cap: Max 5 nodes permitted per folder today." };
+      }
+      return { isBlocked: false, blockReason: '' }; // Admins can post anytime
+    }
+    
+    // Architect (Dev) has no limits
+    if (isDev) return { isBlocked: false, blockReason: '' };
+
+    // Standard Node Submission Protocol for Regular Users
+    if (!sessionConfig || !sessionConfig.enabled) {
+      return { isBlocked: true, blockReason: `Session protocol for "${activeSessionTab}" is currently disabled.` };
+    }
+
+    const now = new Date();
+    const tz = activeParty?.timezone || 'UTC';
+    const nowInTz = new Date(new Intl.DateTimeFormat('en-US', { timeZone: tz }).format(now));
+    const currentTime = `${nowInTz.getHours().toString().padStart(2, '0')}:${nowInTz.getMinutes().toString().padStart(2, '0')}`;
+    
+    if (currentTime < sessionConfig.start || currentTime > sessionConfig.end) {
+      return { isBlocked: true, blockReason: `Window Closed: Node submission for "${activeSessionTab}" only permitted between ${sessionConfig.start} and ${sessionConfig.end}.` };
+    }
+
+    const hasPosted = cards.some(c => 
+      c.user_id === currentUser?.id && 
+      c.folder_id === selectedFolderId &&
+      c.session_type === activeSessionTab && 
+      c.session_date === todayStr
+    );
+
+    if (hasPosted) {
+      return { isBlocked: true, blockReason: `Identity Lock: You have already established a node for today's "${activeSessionTab}" session in this community.` };
+    }
+
+    return { isBlocked: false, blockReason: '' };
+  }, [isAdmin, isDev, sessionConfig, activeSessionTab, currentUser, cards, todayStr, activeParty, selectedFolderId, folders]);
 
   const handlePost = () => {
-    // Note: Participation is now allowed anytime, but we check rate limits.
-    if (reachedRateLimit) {
-      showToast(`Daily limit reached for this community.`, "error");
+    if (isBlocked) {
+      showToast(blockReason, "error");
       return;
     }
     if (!name.trim() || !link1.trim()) return;
     
     let c1 = link1.trim();
     if (!c1.startsWith('http')) c1 = `https://${c1}`;
-    let c2 = link2.trim();
-    if (c2 && !c2.startsWith('http')) c2 = `https://${c2}`;
 
-    onSubmit(name.trim(), c1, c2, undefined, undefined, false);
+    onSubmit(name.trim(), c1, "");
   };
 
   return (
@@ -73,24 +103,54 @@ const CreateProfileModal: React.FC<CreateProfileModalProps> = ({ onClose, onSubm
         </div>
         
         <div className="px-10 pb-10 space-y-6">
-          <div className="p-4 bg-indigo-500/5 border border-indigo-500/10 rounded-2xl">
+          <div className={`p-4 rounded-2xl border ${isBlocked ? 'bg-red-500/10 border-red-500/30' : 'bg-indigo-500/10 border-indigo-500/30'}`}>
             <div className="flex justify-between items-center">
-              <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Lifespan Protocol</span>
-              <span className="text-[9px] font-black text-indigo-500 uppercase">Resets Daily @ {nextResetDisplay}</span>
+              <span className={`text-[9px] font-black uppercase tracking-widest ${isBlocked ? 'text-red-500' : 'text-emerald-500'}`}>
+                {isBlocked ? 'Submission Denied' : `Active Hub Session: ${activeSessionTab}`}
+              </span>
             </div>
-            <p className="text-[10px] text-slate-400 mt-1 font-medium">
-              You are posting in the {sessionStatus.active ? "ACTIVE POD" : "OFF-HOUR"} window. 
-              Your card remains valid until the next morning reset.
+            <p className="text-[10px] text-slate-400 mt-2 font-medium leading-relaxed">
+              {isAdmin 
+                ? "Administrative Authority: You may bypass session timing, but a community limit of 5 nodes applies." 
+                : isBlocked 
+                  ? blockReason 
+                  : `Identity verified. You are authorized to establish one node for the current ${activeSessionTab} window.`}
             </p>
           </div>
 
-          <input placeholder="Display Name" value={name} onChange={e => setName(e.target.value)} className="w-full bg-slate-800 text-white rounded-2xl px-6 py-4 font-bold outline-none border border-slate-700" />
-          <input placeholder="Primary Link" value={link1} onChange={e => setLink1(e.target.value)} className="w-full bg-slate-800 text-white rounded-2xl px-6 py-4 font-bold outline-none border border-slate-700" />
-          <input placeholder="Secondary Link" value={link2} onChange={e => setLink2(e.target.value)} className="w-full bg-slate-800 text-white rounded-2xl px-6 py-4 font-bold outline-none border border-slate-700" />
+          {!isBlocked && (
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-2">Identity Name</label>
+                <input 
+                  placeholder="Username or Handle" 
+                  value={name} 
+                  onChange={e => setName(e.target.value)} 
+                  className={`w-full rounded-2xl px-6 py-4 font-bold outline-none border transition-all ${isDark ? 'bg-slate-800 border-slate-700 text-white focus:border-indigo-500' : 'bg-slate-50 border-slate-200 text-slate-900 focus:border-indigo-500'}`} 
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-2">Primary Content Link</label>
+                <input 
+                  placeholder="https://..." 
+                  value={link1} 
+                  onChange={e => setLink1(e.target.value)} 
+                  className={`w-full rounded-2xl px-6 py-4 font-bold outline-none border transition-all ${isDark ? 'bg-slate-800 border-slate-700 text-white focus:border-indigo-500' : 'bg-slate-50 border-slate-200 text-slate-900 focus:border-indigo-500'}`} 
+                />
+              </div>
+            </div>
+          )}
           
-          <div className="flex gap-4">
-            <button onClick={onClose} className="flex-1 py-5 text-slate-500 font-black">Cancel</button>
-            <button onClick={handlePost} disabled={reachedRateLimit} className="flex-1 py-5 bg-indigo-600 text-white font-black rounded-2xl shadow-xl disabled:opacity-30">Join Feed</button>
+          <div className="flex gap-4 pt-4">
+            <button onClick={onClose} className="flex-1 py-5 text-slate-500 font-black uppercase tracking-widest text-xs">Cancel</button>
+            <button 
+              onClick={handlePost} 
+              disabled={isBlocked} 
+              className={`flex-1 py-5 text-white font-black rounded-2xl shadow-xl transition-all uppercase tracking-widest text-xs border-2 ${isBlocked ? 'bg-slate-200 dark:bg-slate-800 border-transparent text-slate-400 cursor-not-allowed shadow-none' : 'bg-indigo-600 border-indigo-400 active:scale-95'}`}
+            >
+              Establish Node
+            </button>
           </div>
         </div>
       </div>

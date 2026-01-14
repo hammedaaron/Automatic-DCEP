@@ -12,34 +12,27 @@ interface EditProfileModalProps {
 
 const EditProfileModal: React.FC<EditProfileModalProps> = ({ card, onClose, onUpdate, onDelete }) => {
   const { theme, currentUser, isDev } = useApp();
-  // Standardized to snake_case properties from Card interface
   const [name, setName] = useState(card.display_name || '');
   const [link1, setLink1] = useState(card.external_link || '');
-  const [link2, setLink2] = useState(card.external_link2 || '');
-  const [link1Label, setLink1Label] = useState(card.link1_label || 'Post 1');
-  const [link2Label, setLink2Label] = useState(card.link2_label || 'Post 2');
+  const [link1Label, setLink1Label] = useState(card.link1_label || 'VISIT NODE');
   const [isPermanent, setIsPermanent] = useState(card.is_permanent || false);
   const isDark = theme === 'dark';
   
   const isOwn = card.user_id === currentUser?.id;
 
   const handleUpdate = () => {
-    // Trim checks are now safe as state is initialized properly
     if (!name.trim() || !link1.trim()) return;
     
     let cleanLink1 = link1.trim();
     if (!cleanLink1.startsWith('http://') && !cleanLink1.startsWith('https://')) cleanLink1 = `https://${cleanLink1}`;
     
-    let cleanLink2 = link2.trim();
-    if (cleanLink2 && !cleanLink2.startsWith('http://') && !cleanLink2.startsWith('https://')) cleanLink2 = `https://${cleanLink2}`;
-
     onUpdate(
       card.id, 
       name.trim(), 
       cleanLink1, 
-      cleanLink2, 
+      "", 
       isDev ? link1Label : undefined, 
-      isDev ? link2Label : undefined, 
+      undefined, 
       isDev ? isPermanent : false
     );
   };
@@ -53,7 +46,7 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({ card, onClose, onUp
               {isOwn ? 'Edit Your Card' : 'Admin: Management'}
             </h3>
             <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1">
-              Updating Identity in {card.folder_id}
+              Updating Identity in Matrix
             </p>
           </div>
           <button onClick={onClose} className="p-2 text-slate-400 hover:text-indigo-500 transition-colors">
@@ -84,35 +77,19 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({ card, onClose, onUp
                   <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${isPermanent ? 'left-7' : 'left-1'}`} />
                 </button>
               </div>
-              <div className="space-y-3">
-                <div className="space-y-1">
-                   <label className="text-[9px] font-black text-slate-500 uppercase ml-2">Label 1</label>
-                   <input type="text" value={link1Label} onChange={(e) => setLink1Label(e.target.value)} className={`w-full bg-slate-800 border-slate-700 text-white rounded-xl px-4 py-2 text-xs font-bold outline-none border focus:border-emerald-500`} />
-                </div>
-                <div className="space-y-1">
-                   <label className="text-[9px] font-black text-slate-500 uppercase ml-2">Label 2</label>
-                   <input type="text" value={link2Label} onChange={(e) => setLink2Label(e.target.value)} className={`w-full bg-slate-800 border-slate-700 text-white rounded-xl px-4 py-2 text-xs font-bold outline-none border focus:border-emerald-500`} />
-                </div>
+              <div className="space-y-1">
+                 <label className="text-[9px] font-black text-slate-500 uppercase ml-2">Button Label</label>
+                 <input type="text" value={link1Label} onChange={(e) => setLink1Label(e.target.value)} className={`w-full bg-slate-800 border-slate-700 text-white rounded-xl px-4 py-2 text-xs font-bold outline-none border focus:border-emerald-500`} />
               </div>
             </div>
           )}
 
           <div className="space-y-2">
-            <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-2">Post Link 1</label>
+            <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-2">Primary Link</label>
             <input 
               type="text" 
               value={link1}
               onChange={(e) => setLink1(e.target.value)}
-              className={`w-full px-6 py-4 rounded-2xl font-bold outline-none border transition-all ${isDark ? 'bg-slate-800 border-slate-700 text-white focus:border-indigo-500' : 'bg-slate-50 border-slate-200 text-slate-900 focus:border-indigo-500'}`}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-2">Post Link 2 (Optional)</label>
-            <input 
-              type="text" 
-              value={link2}
-              onChange={(e) => setLink2(e.target.value)}
               className={`w-full px-6 py-4 rounded-2xl font-bold outline-none border transition-all ${isDark ? 'bg-slate-800 border-slate-700 text-white focus:border-indigo-500' : 'bg-slate-50 border-slate-200 text-slate-900 focus:border-indigo-500'}`}
             />
           </div>

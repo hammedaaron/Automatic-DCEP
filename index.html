@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -5,15 +6,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Connector Pro | Next-Gen Community Hub</title>
   
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='bg' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' style='stop-color:%234f46e5'/%3E%3Cstop offset='100%25' style='stop-color:%23312e81'/%3E%3C/linearGradient%3E%3Cfilter id='s' x='-20%25' y='-20%25' width='140%25' height='140%25'%3E%3CfeGaussianBlur in='SourceAlpha' stdDeviation='2'/%3E%3CfeOffset dx='0' dy='2' result='offsetblur'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='linear' slope='0.3'/%3E%3C/feComponentTransfer%3E%3CfeMerge%3E%3CfeMergeNode/%3E%3CfeMergeNode in='SourceGraphic'/%3E%3C/feMerge%3E%3C/filter%3E%3C/defs%3E%3Crect width='100' height='100' rx='22' fill='url(%23bg)'/%3E%3Cg filter='url(%23s)'%3E%3Ccircle cx='50' cy='42' r='14' stroke='white' stroke-width='6' fill='none' opacity='0.9'/%3E%3Ccircle cx='36' cy='62' r='14' stroke='white' stroke-width='6' fill='none' opacity='0.9'/%3E%3Ccircle cx='64' cy='62' r='14' stroke='%2300ff9d' stroke-width='6' fill='none' opacity='1'/%3E%3C/g%3E%3C/svg%3E">
-  <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='bg' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' style='stop-color:%234f46e5'/%3E%3Cstop offset='100%25' style='stop-color:%23312e81'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='100' height='100' fill='url(%23bg)'/%3E%3Ccircle cx='50' cy='42' r='14' stroke='white' stroke-width='6' fill='none' opacity='0.9'/%3E%3Ccircle cx='36' cy='62' r='14' stroke='white' stroke-width='6' fill='none' opacity='0.9'/%3E%3Ccircle cx='64' cy='62' r='14' stroke='%2300ff9d' stroke-width='6' fill='none' opacity='1'/%3E%3C/svg%3E">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='bg' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' style='stop-color:%234f46e5'/%3E%3Cstop offset='100%25' style='stop-color:%23312e81'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='100' height='100' rx='22' fill='url(%23bg)'/%3E%3Ccircle cx='50' cy='42' r='14' stroke='white' stroke-width='6' fill='none' opacity='0.9'/%3E%3Ccircle cx='36' cy='62' r='14' stroke='white' stroke-width='6' fill='none' opacity='0.9'/%3E%3Ccircle cx='64' cy='62' r='14' stroke='%2300ff9d' stroke-width='6' fill='none' opacity='1'/%3E%3C/svg%3E">
   
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Connector Pro">
-  <meta name="mobile-web-app-capable" content="yes">
   <meta name="theme-color" content="#4f46e5">
-  <link rel="manifest" href="manifest.json">
 
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -27,72 +24,97 @@
       --sal: env(safe-area-inset-left);
     }
 
+    * {
+      -webkit-tap-highlight-color: transparent;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      height: 100%;
+      width: 100%;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background-color: #020617;
+    }
+
     body {
       font-family: 'Outfit', sans-serif;
       -webkit-font-smoothing: antialiased;
-      -moz-osx-font-smoothing: grayscale;
-      overflow: hidden;
-      height: 100%;
-      width: 100%;
+      -moz-osx-selector-grayscale: grayscale;
       position: fixed;
-      touch-action: manipulation;
+      touch-action: none; /* Handled by inner scrollable areas */
     }
     
+    .light body {
+      background-color: #f8fafc;
+      color: #0f172a;
+    }
+
     #root {
       height: 100%;
       width: 100%;
       overflow: hidden;
+      display: flex;
+      flex-direction: column;
     }
 
-    /* Prevent elastic scroll on the body but allow it in containers */
-    .scroll-container {
-      overflow-y: auto;
-      -webkit-overflow-scrolling: touch;
-      overscroll-behavior-y: contain;
+    .custom-scrollbar {
+      -webkit-overflow-scrolling: touch; /* Essential for iOS momentum */
+      overscroll-behavior-y: contain; /* Stop page bounce */
     }
 
     .custom-scrollbar::-webkit-scrollbar {
-      width: 6px;
-      height: 6px;
+      width: 5px;
+      height: 5px;
     }
     .custom-scrollbar::-webkit-scrollbar-thumb {
-      background: rgba(99, 102, 241, 0.2);
+      background: rgba(99, 102, 241, 0.3);
       border-radius: 10px;
     }
 
-    .power-up-bg {
-      background: linear-gradient(-45deg, #059669, #7c3aed, #2563eb, #059669);
-      background-size: 400% 400%;
-      animation: gradientScent 15s ease infinite;
-    }
-    @keyframes gradientScent {
-      0% { background-position: 0% 50%; }
-      50% { background-position: 100% 50%; }
-      100% { background-position: 0% 50%; }
-    }
-
+    /* Enhanced Card Surface */
     .glass-card {
-      background: rgba(255, 255, 255, 0.15);
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
-      border: 1px solid rgba(255, 255, 255, 0.2);
-    }
-    .dark .glass-card {
-      background: rgba(15, 23, 42, 0.6);
-      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: rgba(255, 255, 255, 1);
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
-    /* Mobile specific refinements */
-    @media (max-width: 768px) {
-      .mobile-header {
-        padding-top: calc(1rem + var(--sat));
-      }
-      .mobile-nav {
-        padding-bottom: calc(1.5rem + var(--sab));
-      }
-      .mobile-content {
-        padding-bottom: calc(100px + var(--sab));
-      }
+    .dark .glass-card {
+      background: #0f172a;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.2);
+    }
+
+    .shimmer {
+      position: relative;
+      overflow: hidden;
+    }
+    .shimmer::after {
+      content: "";
+      position: absolute;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background: linear-gradient(
+        to bottom right,
+        rgba(255, 255, 255, 0) 0%,
+        rgba(255, 255, 255, 0.05) 40%,
+        rgba(255, 255, 255, 0) 50%
+      );
+      transform: rotate(45deg);
+      animation: shimmerEffect 6s infinite linear;
+      pointer-events: none;
+    }
+    @keyframes shimmerEffect {
+      from { transform: translateX(-100%) rotate(45deg); }
+      to { transform: translateX(100%) rotate(45deg); }
+    }
+    
+    /* Fix for touch interaction on scrollable areas */
+    .scrollable {
+      touch-action: pan-y;
+      -webkit-overflow-scrolling: touch;
     }
   </style>
   <script>

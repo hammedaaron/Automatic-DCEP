@@ -47,7 +47,8 @@ const LeaderboardTable: React.FC = () => {
     const myRankIdx = allSorted.findIndex(s => s.userId === currentUser?.id);
     const myStats = currentUser ? statsMap.get(currentUser.id) : null;
 
-    const displayStats = allSorted.filter(stat => stat.role === UserRole.REGULAR);
+    // Show all roles in the leaderboard for full transparency
+    const displayStats = allSorted;
 
     return { 
       displayStats, 
@@ -114,13 +115,15 @@ const LeaderboardTable: React.FC = () => {
                 <th className="p-6">Rank</th>
                 <th className="p-6">Member</th>
                 <th className="p-6">Tier</th>
-                <th className="p-6">Engagement Score</th>
+                <th className="p-6 text-right">Engagement Score</th>
               </tr>
             </thead>
             <tbody className={`divide-y ${isDark ? 'divide-slate-800/50' : 'divide-slate-100'}`}>
               {displayStats.length > 0 ? displayStats.map((stat, index) => {
                 const isMe = stat.userId === currentUser?.id;
                 const tier = getRewardTier(stat.engagement);
+                const isAdminNode = stat.role === UserRole.ADMIN || stat.role === UserRole.DEV;
+
                 return (
                   <tr key={stat.userId} className={`group transition-all ${isMe ? 'bg-indigo-500/10' : 'hover:bg-indigo-500/5'}`}>
                     <td className="p-6">
@@ -135,9 +138,16 @@ const LeaderboardTable: React.FC = () => {
                       </span>
                     </td>
                     <td className="p-6">
-                      <div className="flex items-center gap-2">
-                        <div className={`font-black text-sm ${isDark ? 'text-white' : 'text-slate-900'}`}>{stat.name}</div>
-                        {isMe && <span className="bg-indigo-600 text-white text-[7px] font-black px-1.5 py-0.5 rounded uppercase tracking-tighter">You</span>}
+                      <div className="flex flex-col gap-0.5">
+                        <div className="flex items-center gap-2">
+                          <div className={`font-black text-sm ${isDark ? 'text-white' : 'text-slate-900'}`}>{stat.name}</div>
+                          {isMe && <span className="bg-indigo-600 text-white text-[7px] font-black px-1.5 py-0.5 rounded uppercase tracking-tighter shadow-sm">You</span>}
+                        </div>
+                        {isAdminNode && (
+                          <span className={`text-[8px] font-black uppercase tracking-widest ${stat.role === UserRole.DEV ? 'text-emerald-500' : 'text-orange-500'}`}>
+                            {stat.role}
+                          </span>
+                        )}
                       </div>
                     </td>
                     <td className="p-6">
@@ -146,7 +156,7 @@ const LeaderboardTable: React.FC = () => {
                         <span className={`font-black text-[10px] uppercase tracking-widest ${tier.color}`}>{tier.level}</span>
                       </div>
                     </td>
-                    <td className="p-6 font-black text-indigo-500 text-lg">{stat.engagement}</td>
+                    <td className="p-6 font-black text-indigo-500 text-lg text-right">{stat.engagement}</td>
                   </tr>
                 );
               }) : (

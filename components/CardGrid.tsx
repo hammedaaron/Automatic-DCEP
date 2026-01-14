@@ -1,7 +1,8 @@
-import React, { useMemo, useState } from 'react';
+
+import React, { useMemo } from 'react';
 import { useApp } from '../App';
 import UserCard from './UserCard';
-import { Card, UserRole } from '../types';
+import { Card, UserRole, SessionType } from '../types';
 import { SYSTEM_PARTY_ID } from '../db';
 
 interface CardGridProps {
@@ -10,16 +11,42 @@ interface CardGridProps {
 }
 
 const CardGrid: React.FC<CardGridProps> = ({ folderId, onEditCard }) => {
-  const { cards, searchQuery, currentUser, instructions, folders } = useApp();
-  const [expandedPinnedIds, setExpandedPinnedIds] = useState<Set<string>>(new Set());
+  const { cards, searchQuery, currentUser, instructions, folders, activeParty, theme, activeSessionTab, setActiveSessionTab, isDev } = useApp();
+  const isDark = theme === 'dark';
+
+  const todayStr = useMemo(() => {
+    const tz = activeParty?.timezone || 'UTC';
+    return new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  }, [activeParty]);
 
   const { pinnedCards, regularCards } = useMemo(() => {
     if (!folderId) return { pinnedCards: [], regularCards: [] };
     const folder = folders.find(f => f.id === folderId);
+    
     let filtered = cards.filter(c => c.folder_id === folderId);
 
+    // Protocol: Separation of Architect (System) and Hub (Local) domains
     if (folder?.party_id === SYSTEM_PARTY_ID) {
+      // ARCHITECT ZONE: Only Dev cards are visible.
       filtered = filtered.filter(c => c.creator_role === UserRole.DEV);
+    } else {
+      // COMMUNITY ZONE: Admin and Users visible.
+      filtered = filtered.filter(c => {
+        // Admins: Always visible across all session tabs
+        if (c.creator_role === UserRole.ADMIN || c.is_permanent) {
+          return true;
+        }
+        // Devs: Only visible in local folders if they are explicitly marked "Permanent"
+        if (c.creator_role === UserRole.DEV && c.is_permanent) {
+          return true;
+        }
+        // Users: Visible only in their active tab and current date
+        if (!isDev) {
+           return c.session_type === activeSessionTab && c.session_date === todayStr;
+        }
+        // Dev sees all in standard folders
+        return true;
+      });
     }
 
     const searched = filtered.filter(c => 
@@ -36,7 +63,7 @@ const CardGrid: React.FC<CardGridProps> = ({ folderId, onEditCard }) => {
       pinnedCards: sorted.filter(c => c.is_pinned),
       regularCards: sorted.filter(c => !c.is_pinned)
     };
-  }, [cards, folderId, folders, searchQuery, currentUser]);
+  }, [cards, folderId, folders, searchQuery, currentUser, activeSessionTab, todayStr, isDev]);
 
   const folderInstructions = instructions.filter(i => i.folder_id === folderId);
 
@@ -74,9 +101,9 @@ const CardGrid: React.FC<CardGridProps> = ({ folderId, onEditCard }) => {
             regularCards.map(card => (
               <UserCard key={card.id} card={card} onEdit={() => onEditCard(card)} />
             ))
-          ) : pinnedCards.length === 0 && (
+          ) : (pinnedCards.length === 0 || folderId) && (
             <div className="col-span-full py-20 text-center opacity-50">
-              <p className="text-sm font-black uppercase tracking-widest">Hub is currently vacant</p>
+              <p className="text-sm font-black uppercase tracking-widest">{isDev ? 'No nodes detected in matrix' : 'No nodes found for this session'}</p>
             </div>
           )}
         </div>

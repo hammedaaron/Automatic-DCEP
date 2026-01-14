@@ -23,7 +23,6 @@ const Gate: React.FC<GateProps> = ({ onAuth, invitedHubId }) => {
   const [showUserDocs, setShowUserDocs] = useState(false);
   const [matrixStatus, setMatrixStatus] = useState<'checking' | 'connected' | 'error'>('checking');
   
-  // Restoration of Hub Discovery logic for Genesis mode
   const [showHubDiscovery, setShowHubDiscovery] = useState(false);
   const [existingParties, setExistingParties] = useState<Party[]>([]);
 
@@ -82,11 +81,11 @@ const Gate: React.FC<GateProps> = ({ onAuth, invitedHubId }) => {
     setError('');
     setIsLoading(true);
     try {
-      if (username !== 'Admin') throw new Error("Admin username must be 'Admin'.");
+      if (username !== 'Admin') throw new Error("Genesis requires 'Admin' username.");
       await registerParty(partyName, password, timezone);
       setMode('success');
     } catch (err: any) {
-      setError(err.message || "Failed to create community.");
+      setError(err.message || "Protocol Failure: Hub Genesis aborted.");
     } finally {
       setIsLoading(false);
     }
@@ -107,7 +106,7 @@ const Gate: React.FC<GateProps> = ({ onAuth, invitedHubId }) => {
         onAuth(devUser);
         return;
       } catch (err) {
-        setError("Dev Init Failed.");
+        setError("Dev Authorization Failed.");
         setIsLoading(false);
         return;
       }
@@ -124,7 +123,7 @@ const Gate: React.FC<GateProps> = ({ onAuth, invitedHubId }) => {
       }
 
       if (!activeParty) {
-        setError("Hub not found. Establish it first.");
+        setError("Hub sequence not found. Establish Hub Cluster first.");
         setIsLoading(false);
         return;
       }
@@ -157,7 +156,7 @@ const Gate: React.FC<GateProps> = ({ onAuth, invitedHubId }) => {
         } else {
           const exists = await checkUserExists(cleanUsername, activeParty.id);
           if (exists) {
-            setError("Credentials rejected.");
+            setError("Credentials rejected. Identity mismatch.");
           } else {
             const newUser: User = {
               id: Math.random().toString(36).substr(2, 9),
@@ -173,7 +172,11 @@ const Gate: React.FC<GateProps> = ({ onAuth, invitedHubId }) => {
         }
       }
     } catch (err: any) {
-      setError(`Matrix Connection Interrupted: ${err.message}`);
+      if (err.message?.includes("duplicate key")) {
+        setError("Identity Collision: This slot or name is already registered in the matrix.");
+      } else {
+        setError(`Matrix Error: ${err.message}`);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -197,7 +200,7 @@ const Gate: React.FC<GateProps> = ({ onAuth, invitedHubId }) => {
                <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
              </div>
              <h2 className="text-4xl font-black text-white uppercase tracking-tighter">Hub Initialized</h2>
-             <p className="text-slate-400 font-medium">Community established in the Matrix. Access and invite your nodes now.</p>
+             <p className="text-slate-400 font-medium">Community cluster established. Nodes are now authorized for entry.</p>
              <button onClick={() => setMode('login')} className="px-12 py-5 bg-indigo-600 text-white font-black rounded-2xl shadow-xl uppercase tracking-widest text-sm">Access Command Center</button>
           </div>
         ) : (
@@ -209,7 +212,7 @@ const Gate: React.FC<GateProps> = ({ onAuth, invitedHubId }) => {
 
             <form onSubmit={mode === 'admin-signup' ? handleAdminSignup : handleLogin} className="bg-slate-900 border border-slate-800 p-6 sm:p-10 rounded-[2.5rem] shadow-2xl space-y-6">
               <div className="text-center">
-                {invitedHubId && <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-2">Joining Invited Hub</p>}
+                {invitedHubId && <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-2">Infiltrating Invited Hub</p>}
                 <h3 className="text-2xl font-black text-white uppercase tracking-tight">{mode === 'admin-signup' ? 'Hub Genesis' : 'Infiltrate Hub'}</h3>
                 <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mt-1">Identity verification required</p>
               </div>

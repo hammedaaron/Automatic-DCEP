@@ -1,4 +1,3 @@
-
 export enum UserRole {
   REGULAR = 'REGULAR',
   ADMIN = 'ADMIN',
@@ -13,6 +12,14 @@ export enum RewardLevel {
   CROWN = 'CROWN'
 }
 
+export type SessionType = 'morning' | 'afternoon' | 'evening';
+
+export interface SessionWindow {
+  enabled: boolean;
+  start: string; // "HH:mm"
+  end: string;   // "HH:mm"
+}
+
 export interface PodSession {
   name: string;
   start: string; // "HH:mm"
@@ -24,8 +31,13 @@ export interface Party {
   name: string;
   timezone?: string;
   pod_sessions?: PodSession[];
+  session_config?: {
+    morning: SessionWindow;
+    afternoon: SessionWindow;
+    evening: SessionWindow;
+  };
   max_slots?: number;
-  is_parking_enabled?: boolean; // New feature toggle
+  is_parking_enabled?: boolean;
 }
 
 export interface User {
@@ -39,6 +51,7 @@ export interface User {
   device_fingerprint?: string;
   push_token?: string;
   engagement_warnings?: number;
+  warning_label?: string; // 'CLEAN', '1st Warning', '2nd Warning', 'Final Warning'
   missed_pod_warnings?: number;
   reward_level?: RewardLevel;
   total_score?: number;
@@ -66,6 +79,12 @@ export interface Card {
   is_permanent?: boolean;
   is_pinned?: boolean;
   timestamp: number;
+  window_id?: string;
+  session_type?: SessionType;
+  session_date?: string; // "YYYY-MM-DD"
+  is_admin_card?: boolean;
+  engagement_warnings?: number;
+  warning_label?: string;
   x?: number;
   y?: number;
 }
