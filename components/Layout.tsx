@@ -69,12 +69,16 @@ const Layout: React.FC<LayoutProps & { onOpenCreateProfile: () => void }> = ({ c
     if (!config || isDev) return [];
     
     const available: { id: SessionType, label: string, status: string, isOpen: boolean }[] = [];
-    const now = new Date();
     const tz = activeParty?.timezone || 'UTC';
-    const nowInTz = new Date(new Intl.DateTimeFormat('en-US', { timeZone: tz }).format(now));
-    const currentH = nowInTz.getHours();
-    const currentM = nowInTz.getMinutes();
-    const currentTime = `${currentH.toString().padStart(2, '0')}:${currentM.toString().padStart(2, '0')}`;
+    
+    const timeFormatter = new Intl.DateTimeFormat('en-GB', {
+      timeZone: tz,
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    });
+
+    const currentTime = timeFormatter.format(new Date());
 
     const check = (type: SessionType, name: string) => {
       const s = config[type];

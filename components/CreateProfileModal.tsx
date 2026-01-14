@@ -55,10 +55,16 @@ const CreateProfileModal: React.FC<CreateProfileModalProps> = ({ onClose, onSubm
       return { isBlocked: true, blockReason: `Session protocol for "${activeSessionTab}" is currently disabled.` };
     }
 
-    const now = new Date();
+    // --- PROTOCOL TIME SYNC ---
     const tz = activeParty?.timezone || 'UTC';
-    const nowInTz = new Date(new Intl.DateTimeFormat('en-US', { timeZone: tz }).format(now));
-    const currentTime = `${nowInTz.getHours().toString().padStart(2, '0')}:${nowInTz.getMinutes().toString().padStart(2, '0')}`;
+    const timeFormatter = new Intl.DateTimeFormat('en-GB', {
+      timeZone: tz,
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    });
+
+    const currentTime = timeFormatter.format(new Date());
     
     if (currentTime < sessionConfig.start || currentTime > sessionConfig.end) {
       return { isBlocked: true, blockReason: `Window Closed: Node submission for "${activeSessionTab}" only permitted between ${sessionConfig.start} and ${sessionConfig.end}.` };
